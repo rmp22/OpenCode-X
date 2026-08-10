@@ -1,0 +1,13 @@
+=== GO ADAPTER ===
+
+- Read go.mod, package boundaries, generated files, and the repository test command first.
+- Use Effective Go and Google Go practices where they improve the repository. In Android-adjacent code, follow checked-in AOSP or Google build and interface conventions instead of forcing a Go-specific layout.
+- Keep package names short and clear. Let package structure provide context instead of repeating it in exported names.
+- Use structs for data with explicit ownership and methods for behavior. Use interfaces at consumer boundaries, not as a default wrapper for every concrete type.
+- Return errors with context and handle them at the right boundary. Do not discard errors.
+- Keep interfaces small and use them at boundaries that need substitution.
+- Respect context cancellation and deadlines through every blocking call.
+- Protect shared state with the existing ownership, mutex, or channel pattern.
+- Close files, responses, transactions, and other resources on every path.
+- Validate external input before storing or using it.
+- Test normal, malformed, denied, failed, timed-out, cancelled, and concurrent paths.

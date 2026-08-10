@@ -1,0 +1,11 @@
+=== COMPLEXITY RULE ===
+
+- Do not simplify only to write less code.
+- Keep all required behavior, edge cases, lifetime rules, security checks, safety rules, compatibility, and tests.
+- Use a simpler design only when it keeps all requirements and failure handling.
+- Keep needed complexity visible and testable.
+- Do not add layers, factories, wrappers, configuration, or dependencies without a named requirement.
+- Keep each job in its owning module. Do not flatten boundaries or hide them to shorten the change.
+- Do not hide complexity with workarounds, skipped validation, ignored errors, stubs, or unchecked assumptions.
+
+=== END COMPLEXITY RULE ===

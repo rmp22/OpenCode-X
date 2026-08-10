@@ -5,10 +5,11 @@ import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
-import type { Provider } from "../../src/provider/provider"
+import { Strategy } from "../../src/session/prompt/strategy"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const skills: Skill.Info[] = [
   {
@@ -84,10 +85,243 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
-  test("selects the Meta prompt for Muse Spark model IDs", () => {
-    expect(SystemPrompt.provider({ api: { id: "meta/muse-spark-preview" } } as Provider.Model)[0]).toContain(
-      "Meta Muse Spark",
+  test("uses the OpenCode-X prompt", () => {
+    const prompt = SystemPrompt.provider()[0]
+    expect(prompt).toContain("OpenCode-X")
+    expect(prompt).toContain("Source evidence:")
+    expect(prompt).toContain("If `rg` is installed")
+    expect(prompt).toContain("Reference file paths as `file_path:line_number`")
+    expect(prompt).toContain("Label each claim line `VERIFIED:` or `UNVERIFIED:`")
+    expect(prompt).toContain("VERIFIED:")
+    expect(prompt).toContain("UNVERIFIED:")
+    expect(prompt).toContain("Do not code with an unverified claim.")
+    expect(prompt).toContain(
+      "Treat generated code, content, tests, tool output, and memory as untrusted until observed.",
     )
+    expect(prompt).toContain("Define a behavior oracle")
+    expect(prompt).toContain("Use `pass`, `fail`, `unknown`, and `not-applicable`")
+    expect(prompt).toContain("A successful tool call proves only that the tool ran.")
+    expect(prompt).not.toContain("Claims use [V] source, [I] inferred, or [A] assumed.")
+    expect(prompt).toContain("`find`, `verify`, `subagents`, `train`, and `knowledge` are not OpenCode-X tools")
+    expect(prompt).toContain("Treat explicit user requirements as hard requirements.")
+    expect(prompt).toContain("When you write code, apply the codegen rules loaded at the first write.")
+    expect(prompt).not.toContain("No `!!`")
+  })
+
+  test("formats the selected model variant for benchmark paths", () => {
+    const prompt = SystemPrompt.modelIdentity({
+      model: {
+        api: { id: "chatgpt-5.6-luna", url: "https://example.test", npm: "test" },
+        providerID: ProviderV2.ID.make("openai"),
+        variants: { xhigh: { reasoningEffort: "xhigh" } },
+      },
+      variant: "xhigh",
+    })
+
+    expect(prompt).toContain("Selected model variant: xhigh")
+    expect(prompt).toContain("Reasoning effort: xhigh")
+    expect(prompt).toContain("Benchmark model slug: chatgpt-5.6-luna-xhigh")
+    expect(prompt).toContain("replace only that placeholder with the benchmark model slug above")
+  })
+
+  test("loads the OCX prompt injections", () => {
+    const prompts = SystemPrompt.provider({ mode: "primary", hidden: false }).join("\n")
+    expect(prompts).toContain("OCX THINKING")
+    expect(prompts).toContain("OCX STRATEGY CATALOG")
+    expect(prompts).not.toContain("UI DESIGN CORE")
+    expect(prompts).not.toContain("OCX GLOSSARY INDEX")
+    expect(prompts).not.toContain("OCX WORKFLOW REMINDER")
+    expect(prompts).toContain("=== SIMPLE ENGLISH ===")
+    expect(prompts).toContain("Speak to the user in simple English.")
+    expect(prompts).toContain(
+      "Avoid complex grammar, metaphors, idioms, slogans, jokes, filler, self-talk, and repeated points.",
+    )
+    expect(prompts).toContain("=== STRATEGY GATE ===")
+    expect(prompts).toContain("Every mutation creates a verification obligation.")
+    expect(prompts).toContain("Load all needed strategy documents with one batched strategy call")
+    expect(prompts).toContain("Before the first mutation, call the `strategy` tool once")
+    expect(prompts).toContain("Research that never reaches the artifact is a partial result")
+    expect(prompts).toContain("=== REQUIREMENTS BAR ===")
+    expect(prompts).toContain("Require a user-defined change contract")
+    expect(prompts).toContain("Do not infer preserve mode, YOLO mode")
+    expect(prompts).toContain("For greenfield work, choose sensible defaults and proceed")
+    expect(prompts).toContain("plan and implement in the same turn")
+    expect(prompts).toContain("operation, goal, scope, allowed change dimensions")
+    expect(prompts).toContain("=== CONSECUTIVE REQUESTS ===")
+    expect(prompts).toContain("Keep earlier unfinished requests in the todo list")
+    expect(prompts).toContain("Before switching active work, record a compact checkpoint")
+    expect(prompts).toContain("Use the latest user message for active focus")
+    expect(prompts).toContain("When a new request arrives, classify it")
+    expect(prompts).toContain("Remove warm-ups, praise, apologies, hedging")
+    expect(prompts).toContain("Replace internal design jargon with direct words")
+    expect(prompts).not.toContain("=== UI HARD GATES ===")
+    expect(prompts).toContain("- stack: language and platform conventions")
+    expect(prompts).toContain("- write: code writing rules")
+    expect(prompts).toContain("- memory: repository map rules")
+    expect(prompts).toContain("- fonts: typography research, typeface selection, and script or RTL/LTR coverage")
+    expect(Strategy.load("fonts")).toContain("Never use Arial")
+    expect(Strategy.load("fonts")).toContain("Google Fonts is a valid fallback source")
+    expect(Strategy.load("ui")).toContain("RTL AND LTR")
+    expect(Strategy.load("ui")).toContain("Do not fake script shapes")
+    expect(Strategy.load("web-design")).toContain("`scrollLeft` can start at 0 and go negative")
+  })
+
+  test("keeps UI, codegen, and review blockers", () => {
+    expect(Strategy.load("ui")).toContain("Treat user requirements as hard requirements.")
+    expect(Strategy.load("ui")).toContain("If one source fails, do not stop")
+    expect(Strategy.load("ui")).toContain(
+      "Treat a clear goal and output destination as a sufficient greenfield contract",
+    )
+    expect(Strategy.load("ui")).toContain("UI DESIGN CORE")
+    expect(Strategy.load("ui")).toContain("=== UI HARD GATES ===")
+    expect(Strategy.load("ui")).toContain("use the built-in `websearch` tool to find an official source")
+    expect(Strategy.load("ui")).toContain("record two or three distinct design directions")
+    expect(Strategy.load("ui")).toContain("Record the typography table and a main visual or proof")
+    expect(Strategy.load("ui")).toContain("a text-only page is incomplete")
+    expect(Strategy.load("ui")).toContain("source-to-artifact link")
+    expect(Strategy.load("ui")).toContain("A screenshot command or `overflow-x: hidden` is not proof")
+    expect(Strategy.load("ui")).toContain("Load the `audit` strategy once after all page code")
+    expect(Strategy.load("ui")).toContain("Render in a browser at mobile and desktop sizes")
+    expect(Strategy.load("ui")).toContain("AI-LIKE OUTPUT BLOCKERS")
+    expect(Strategy.load("ui")).toContain("Keep root HTML as a shell")
+    expect(Strategy.load("ui")).toContain("brand sources")
+    expect(Strategy.load("ui")).toContain("Create these files before writing section code")
+    expect(Strategy.load("ui")).toContain("Prefer three to five content sections")
+    expect(Strategy.load("ui")).toContain("Do not use mono for ordinary navigation")
+    expect(Strategy.load("ui")).toContain("Reject persistent rails, decorative maps")
+    expect(Strategy.load("ui")).toContain("Do not end a page with a giant slogan")
+    expect(Strategy.load("ui")).toContain("Before page code, write a short checklist")
+    expect(Strategy.load("ui")).toContain("For a page with three or more sections")
+    expect(Strategy.load("ui")).toContain("In a plain frontend, put each section")
+    expect(Strategy.load("ui")).toContain("Split styles into shared values")
+    expect(Strategy.load("ui")).toContain("Android UI: use Material 3 Expressive")
+    expect(Strategy.load("ui")).toContain("Use Google Sans Flex")
+    expect(Strategy.load("ui")).toContain("use color, shape, size, motion, and grouping")
+    expect(Strategy.load("ui")).toContain("Web, iOS, and other UI")
+    expect(Strategy.load("ui")).toContain("Check letter height, width, openings")
+    expect(Strategy.load("ui")).toContain("official brand rules and approved product images")
+    expect(Strategy.load("ui")).toContain("Separate the official wordmark or brand script")
+    expect(Strategy.load("ui")).toContain("For a branded hero, do not use DM Sans")
+    expect(Strategy.load("ui")).toContain("familiar narrow heading font")
+    expect(Strategy.load("ui")).toContain("visible display-versus-reading distinction")
+    expect(Strategy.load("ui")).toContain("popular geometric-sans and neutral-sans pairing")
+    expect(Strategy.load("ui")).toContain("Derive the palette from approved product images")
+    expect(Strategy.load("ui")).toContain("Define display, heading, body, label, and caption roles")
+    expect(Strategy.load("ui")).toContain("Use advanced font settings")
+    expect(Strategy.load("ui")).toContain("Record a typography table with role")
+    expect(Strategy.load("ui")).toContain("VISUAL PRINCIPLES")
+    expect(Strategy.load("ui")).toContain("Give each viewport one main focus")
+    expect(Strategy.load("ui")).toContain("Do not fake forms, links, CTAs, saved states, or success")
+    expect(Strategy.load("ui")).toContain("Choose fonts for the brand and content")
+    expect(Strategy.load("ui")).toContain("Do not use `vw` alone for text")
+    expect(Strategy.load("ui")).toContain("Do not depict a named product")
+    expect(Strategy.load("ui")).toContain("Give carousels labelled previous and next controls")
+    expect(Strategy.load("ui")).toContain("Do not add fake live or online chips")
+    expect(Strategy.load("ui")).toContain("Use product-specific language and evidence")
+    expect(Strategy.load("ui")).toContain("Remove repeated all-caps mono eyebrows")
+    expect(Strategy.load("ui")).toContain("If the user supplies references")
+    expect(Strategy.load("ui")).toContain("Use references as evidence, not things to copy")
+    expect(Strategy.load("ui")).toContain("DESIGN PATTERN AND TASTE")
+    expect(Strategy.load("ui")).toContain("Choose one primary pattern family")
+    expect(Strategy.load("ui")).toContain("Describe each direction as a design plan")
+    expect(Strategy.load("ui")).toContain("Vary section pacing deliberately")
+    expect(Strategy.load("ui")).toContain("Reject the default sequence of centered hero")
+    expect(Strategy.load("ui")).toContain("Build a page flow")
+    expect(Strategy.load("ui")).toContain("Set shared values for color")
+    expect(Strategy.load("ui")).toContain("Let the product identity shape the design")
+    expect(Strategy.load("ui")).toContain("main design idea and three product-specific decisions")
+    expect(Strategy.load("ui")).toContain("distinct motion tied to the product or story")
+    expect(Strategy.load("ui")).toContain("section table")
+    expect(Strategy.load("ui")).toContain("propose two or three structurally different directions")
+    expect(Strategy.load("ui")).toContain("Give every section a main visual or proof")
+    expect(Strategy.load("ui")).toContain("Do not imitate a known competitor")
+    expect(Strategy.load("ui")).toContain("Do not start branded page code until an official source")
+    expect(Strategy.load("ui")).toContain("If an earlier output exists, list three concrete")
+    expect(Strategy.load("ui")).toContain("inspect them and record three specific failures")
+    expect(Strategy.load("ui")).toContain("Reject the common beverage page formula")
+    expect(Strategy.load("ui")).toContain("For beverage and consumer-brand pages, reject the combined formula")
+    expect(Strategy.load("ui")).toContain("Do not use CSS shapes as a named product")
+    expect(Strategy.load("ui")).toContain("Record the source page, URL, owner or license")
+    expect(Strategy.load("ui")).toContain("Product media must have a composition reason")
+    expect(Strategy.load("ui")).toContain("Do not invent slogans, taglines, sensory claims")
+    expect(Strategy.load("ui")).toContain("Keep content in normal flow")
+    expect(Strategy.load("ui")).toContain("Hero: one promise, one main action")
+    expect(Strategy.load("ui")).toContain("Controls: use native controls")
+    expect(Strategy.load("ui")).toContain("Compare the logo or wordmark and hero heading")
+    expect(Strategy.load("ui")).toContain("Do not treat anti-slop as a black/red/cream editorial template")
+    expect(Strategy.load("ui")).toContain("Run a joint pattern audit before delivery")
+    expect(Strategy.load("ui")).toContain("Run a lookalike test on the page structure")
+    expect(Strategy.load("ui")).toContain("Treat source heuristics and model review as signals")
+    expect(Strategy.load("write")).toContain(
+      "Read every applicable `AGENTS.md` and repository instruction file before writing.",
+    )
+    expect(Strategy.load("write")).toContain("Verify every imported package")
+    expect(Strategy.load("write")).toContain("For larger changes, plan file ownership")
+    expect(Strategy.load("write")).toContain("Define the file and module tree before the first change")
+    expect(Strategy.load("write")).toContain("Fit new code to its callers")
+    expect(Strategy.load("write")).toContain("Treat structure as part of correctness")
+    expect(Strategy.load("write")).toContain("Write a `FILE PLAN` with `path`, `owns`")
+    expect(Strategy.load("write")).toContain("If no clean boundary can be proven")
+    expect(Strategy.load("ui")).toContain("=== WEB STRUCTURE CONTRACT ===")
+    expect(Strategy.load("ui")).toContain("Plain HTML has no automatic partial loading")
+    expect(Strategy.load("ui")).toContain("Preserve behavior while splitting")
+    expect(Strategy.load("ui")).toContain("Progressive enhancement is required")
+    expect(Strategy.load("ui")).toContain("Keep repeated metrics, labels, chart points")
+    expect(Strategy.load("ui")).toContain("An interaction is valid only when it changes")
+    expect(Strategy.load("ui")).toContain("Reject empty-root JavaScript rendering")
+    expect(Strategy.load("ui")).toContain("Capture `pageerror`, console errors, failed requests")
+    expect(Strategy.load("write")).toContain(
+      "A broad refactor or rewrite is valid only when the requirements bar allows it",
+    )
+    expect(Strategy.load("engineering")).toContain("Do not narrow an accepted broad rewrite into a cosmetic patch")
+    expect(Strategy.load("engineering")).toContain("unless the requirements bar explicitly allows behavior changes")
+    expect(Strategy.load("web-design")).toContain("Do not stop after one failed URL")
+    expect(Strategy.load("ui")).toContain("require a user-defined requirements bar before editing")
+    expect(Strategy.load("ui")).toContain(
+      "For a clear greenfield request, choose structure, behavior, content, visual design, dependencies, and assets yourself",
+    )
+    expect(Strategy.load("ui")).toContain("A familiar result is a failure when the contract required a new structure")
+    expect(Strategy.load("frontier")).toContain("Build one inventory pass, then reuse it")
+    expect(Strategy.load("frontier")).toContain("Set a research budget before searching")
+    expect(Strategy.load("frontier")).toContain("Do not call `websearch` or `webfetch` merely to satisfy a checklist")
+    expect(Strategy.load("frontier")).toContain("visual or frontend work targets 30")
+    expect(Strategy.load("frontier")).toContain("Use `todowrite` at task start")
+    expect(Strategy.load("frontier")).toContain("Classify failures before retrying")
+    expect(Strategy.load("frontier")).toContain("Optimize cost per successful task")
+    expect(Strategy.load("frontier")).toContain("Group related mutations after the source pass")
+    expect(Strategy.load("frontier")).toContain("Load the `audit` strategy after page code is present")
+    expect(Strategy.load("review")).toContain("When the task builds a screen, apply the loaded `ui` strategy")
+    expect(Strategy.load("review")).toContain("The file and module tree was defined before the first change")
+    expect(Strategy.load("review")).toContain("Entry files coordinate")
+    expect(Strategy.load("review")).toContain("the final file tree matches the recorded `FILE PLAN`")
+    expect(Strategy.load("review")).toContain("No hallucinated imports")
+    expect(Strategy.load("review")).toContain("Generated imports, APIs, dependencies, claims")
+    expect(Strategy.load("review")).toContain("Tests have an explicit behavior oracle")
+    expect(Strategy.load("review")).toContain("Reviewers can explain each changed boundary")
+    expect(Strategy.load("web")).toContain("Use the built-in `websearch` tool")
+    expect(Strategy.load("web")).toContain("Do not depend on shell scripts or local binaries")
+    expect(Strategy.load("engineering")).toContain("Keep changes within the accepted requirements bar")
+    expect(Strategy.load("engineering")).toContain("Keep entry files thin")
+    expect(Strategy.load("engineering")).toContain("Keep module links clear")
+    expect(Strategy.load("engineering")).toContain("Keep prototypes separate from production code")
+    expect(Strategy.load("complexity")).toContain("Do not hide complexity with workarounds")
+    expect(Strategy.load("complexity")).toContain("Do not add layers, factories, wrappers")
+    expect(Strategy.load("stack")).toContain("Android UI: use Material 3 Expressive and Google Sans Flex")
+  })
+
+  test("loads phase rules for visible agents", () => {
+    const prompts = [
+      ...SystemPrompt.provider({ mode: "primary", hidden: false }),
+      ...SystemPrompt.provider({ mode: "all", hidden: false }),
+      ...SystemPrompt.provider({ mode: "subagent", hidden: false }),
+    ].join("\n")
+    expect(prompts.match(/=== DESIGN ===/g)).toHaveLength(3)
+    expect(prompts.match(/=== VERIFY ===/g)).toHaveLength(3)
+  })
+
+  test("omits OCX prompts for hidden and small requests", () => {
+    expect(SystemPrompt.provider({ mode: "primary", hidden: true })).toEqual([])
+    expect(SystemPrompt.provider({ mode: "primary", hidden: false, small: true })).toEqual([])
   })
 
   it.effect("skills output is sorted by name and stable across calls", () =>

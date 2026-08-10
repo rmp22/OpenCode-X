@@ -1,0 +1,3 @@
+Record the final evidence-based audit before delivery.
+
+Use this tool after the relevant artifact exists and before final verification. Select review axes from the task and artifact. Record observed findings with severity, evidence, risk, smallest useful fix, and a check that could fail. Record every check with pass, fail, unknown, or not-applicable. Keep unresolved questions in remainingUnknowns. Do not claim a passing audit when evidence is missing.

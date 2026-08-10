@@ -1,0 +1,29 @@
+=== FONTS STANDARD ===
+
+- Choose typefaces from research, not memory or popularity. Use `websearch` and `webfetch` on primary guides before picking:
+   - Google Fonts Knowledge (fonts.google.com/knowledge) — purpose-based choice, optical sizes, pairing, font loading
+   - Typewolf (typewolf.com) — underused families, pairing systems, overused-font warnings
+   - Fonts In Use (fontsinuse.com) — real-world type in context
+   - chosen access: NN/G pairing guide (nngroup.com/articles/pairing-typefaces) — distinct roles, distinct characters (1/l/I), neutral + display
+   - Monotype choosing-type guidance — same foundry or same designer pairs, optical sizes
+- Define roles before choosing: display/heading (personality), reading/body (legibility), code/mono (code only). Pick one family per role.
+- Prefer families with optical sizes (display and text cuts) and multiple weights or variable axes, so one family keeps its voice at every size.
+- Never use Arial, Helvetica, or a default system font stack as the final typography for a designed surface.
+- Never use monospace for UI copy: headings, body, labels, buttons, navigation, or captions. Monospace is only for code and real technical data.
+- Do not default to the AI-slop family list as the only option: Inter, Poppins, Manrope, Montserrat, Space Grotesk, DM Sans, Sora, Outfit, IBM Plex. Use one of these only with a source-backed reason, and compare it with a different voice first.
+- Web: Google Fonts is a valid fallback source when primary foundry fonts are not available or not licensed. Use the family page URL as the source, confirm the license (usually OFL) and the needed weights and optical sizes, and record the loading format and swap behavior.
+- A named or provided brand font wins for the brand surface; this standard governs remaining roles only. Record who provided it and any license limit.
+- For each font, record the typography table: role, family, foundry or Google page, license, fallback stack, optical sizes, weights, script coverage, reason, and rejected alternative. Keep the table up to date as you edit.
+- When a needed font cannot be verified, found, or licensed, search again for a fitting alternative; record `UNVERIFIED:` for the missing part and continue. Do not stop and do not invent a brand font.
+
+SCRIPT COVERAGE AND DIRECTION
+- Treat writing direction as independent from language. One surface direction, set at the root, propagates into menus, popovers, and overlays; do not change the locale just to force a direction.
+- Choose every font for the scripts the surface really renders. Latin-only evidence is not proof for Arabic, Hebrew, Persian, Urdu, Indic, Thai, Vietnamese, or CJK text. Check the family covers each needed script, or pair it with a matched fallback for that script, and never force a Latin-only font to fake a script with invented glyphs.
+- Hebrew and Arabic need a family with proper joining and vowel behavior; do not fake them with drawn letters, ligatures, diacritics, or reversed Latin.
+- Keep code, URLs, IDs, and file paths in the base direction even when the surrounding text flows the other way, and isolate mixed-script runs instead of forcing them.
+- Mirror directional meaning only when it signals navigation or progress (back, forward, previous, next, chevron, indentation), not when it shows a literal object (clock, map, media controls, chart axes, text).
+- Check text input, wrapping, line breaks, and number alignment in both directions at narrow widths; hyphenation rules differ between LTR and RTL.
+- Check keyboard arrows and previous/next gestures in both directions; left/right swap meaning in RTL for directional controls.
+- Verify at least one real RTL pass: the target language in RTL, plus forced RTL and mixed RTL/LTR content with long labels, numbers, code, and paths, plus 200% text sizing when the platform supports zoom.
+
+=== END FONTS STANDARD ===

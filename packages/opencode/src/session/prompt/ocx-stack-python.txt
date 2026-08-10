@@ -1,0 +1,10 @@
+=== PYTHON ADAPTER ===
+
+- Read pyproject, package layout, supported Python versions, and the project test command first.
+- Keep type hints at public boundaries and validate external data before use.
+- Raise specific errors with useful context. Do not hide failures with broad exception handling.
+- Use context managers for files, locks, processes, and other owned resources.
+- Make async code await real async work. Do not block an event loop with synchronous I/O.
+- Keep imports explicit and avoid import-time side effects.
+- Test success, malformed input, denied access, failure, timeout, cancellation, and partial results.
+- Do not use eval, exec, shell strings, or unsafe deserialization for untrusted input.

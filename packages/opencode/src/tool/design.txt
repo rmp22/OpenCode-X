@@ -1,0 +1,3 @@
+Record the visual direction before building a screen.
+
+State the audience and user task. Choose one concrete direction with its pattern, type roles, composition, media behavior, surface treatment, and motion purpose. Record at least three decisions that make the result distinct from common category templates. Record one rejected alternative, a media plan, and a fallback when requested media cannot be verified. The tool returns a design direction that remains visible in the conversation.

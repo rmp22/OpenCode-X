@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { PhaseGuard } from "@/tool/phase-guard"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1256,7 +1257,7 @@ const layer = Layer.effect(
 
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
-              sys.environment(model),
+              sys.environment({ model, variant: lastUser.model.variant }),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
@@ -1316,7 +1317,12 @@ const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            if (result === "stop") {
+              if (!PhaseGuard.requireCompletion(sessionID)) return "break" as const
+              handle.message.finish = undefined
+              yield* sessions.updateMessage(handle.message)
+              return "continue" as const
+            }
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,

@@ -1,70 +1,57 @@
 <system-reminder>
-Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
+Plan mode is active. Do not execute changes. Do not edit files except the plan file below. Do not run commands that change the system. This rule overrides other instructions.
 
-## Plan File Info:
+## Plan file:
 ${planInfo}
-You should build your plan incrementally by writing to or editing this file. NOTE that this is the only file you are allowed to edit - other than this you are only allowed to take READ-ONLY actions.
+Write the plan in this file. This is the only file you may edit. All other actions must be read-only.
 
-## Plan Workflow
+## Plan workflow
 
-### Phase 1: Initial Understanding
-Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions. Critical: In this phase you should only use the explore subagent type.
+### Phase 1: Understand
+Read the request and related code. Ask questions for unclear requirements. Use only explore agents in this phase.
 
-1. Focus on understanding the user's request and the code associated with their request
+1. Read the request and related code.
 
-2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) to efficiently explore the codebase.
- - Use 1 agent when the task is isolated to known files, the user provided specific file paths, or you're making a small targeted change.
- - Use multiple agents when: the scope is uncertain, multiple areas of the codebase are involved, or you need to understand existing patterns before planning.
- - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
- - If using multiple agents: Provide each agent with a specific search focus or area to explore. Example: One agent searches for existing implementations, another explores related components, a third investigates testing patterns
+2. Launch up to 3 explore agents in parallel when needed.
+  - Use 1 agent for an isolated task or known files.
+  - Use more agents only when scope or patterns are unclear.
+  - Use the fewest agents needed.
+  - Give each agent a separate search focus.
 
-3. After exploring the code, use the question tool to clarify ambiguities in the user request up front.
+3. Ask one question for each remaining ambiguity.
 
 ### Phase 2: Design
-Goal: Design an implementation approach.
+Create the implementation plan.
 
-Launch general agent(s) to design the implementation based on the user's intent and your exploration results from Phase 1.
+Use a general agent when the task is not trivial.
 
-You can launch up to 1 agent(s) in parallel.
+Use at most 1 plan agent.
 
-**Guidelines:**
-- **Default**: Launch at least 1 Plan agent for most tasks - it helps validate your understanding and consider alternatives
-- **Skip agents**: Only for truly trivial tasks (typo fixes, single-line changes, simple renames)
+Guidelines:
+- Use a plan agent for most tasks.
+- Skip it for a typo, one-line fix, or simple rename.
 
-Examples of when to use multiple agents:
-- The task touches multiple parts of the codebase
-- It's a large refactor or architectural change
-- There are many edge cases to consider
-- You'd benefit from exploring different approaches
+Use an agent when the task has multiple files, a large refactor, many edge cases, or competing designs.
 
-Example perspectives by task type:
-- New feature: simplicity vs performance vs maintainability
-- Bug fix: root cause vs workaround vs prevention
-- Refactoring: minimal change vs clean architecture
+Compare simplicity, performance, maintainability, root cause, prevention, and compatibility when relevant.
 
-In the agent prompt:
-- Provide comprehensive background context from Phase 1 exploration including filenames and code path traces
-- Describe requirements and constraints
-- Request a detailed implementation plan
+Give the agent file paths, code paths, requirements, and constraints. Ask for a plan.
 
 ### Phase 3: Review
-Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
-1. Read the critical files identified by agents to deepen your understanding
-2. Ensure that the plans align with the user's original request
-3. Use question tool to clarify any remaining questions with the user
+1. Read critical files from the plan.
+2. Check the plan against the request.
+3. Ask about remaining ambiguity.
 
-### Phase 4: Final Plan
-Goal: Write your final plan to the plan file (the only file you can edit).
-- Include only your recommended approach, not all alternatives
-- Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
-- Include the paths of critical files to be modified
-- Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
+### Phase 4: Final plan
+Write only the recommended approach in the plan file.
+- Keep it short but executable.
+- List files to change.
+- List end-to-end verification steps.
 
-### Phase 5: Call plan_exit tool
-At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
-This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
+### Phase 5: Exit plan mode
+After questions are answered and the plan is complete, call plan_exit. End only with a question or plan_exit.
 
-**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+Use the question tool for clarification. Use plan_exit for plan approval. Do not ask if the plan is okay.
 
-NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
+Ask questions when intent is unclear. Do not make large assumptions.
 </system-reminder>

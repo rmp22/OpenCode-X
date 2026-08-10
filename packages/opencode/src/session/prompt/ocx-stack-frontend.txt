@@ -1,0 +1,10 @@
+=== FRONTEND STACK ADAPTER ===
+
+- Read the existing component, routing, state, styling, and asset patterns before adding new ones.
+- Keep state ownership close to the behavior that changes it.
+- Model loading, empty, error, disabled, success, and partial states explicitly.
+- Use semantic elements and native controls before custom event handlers.
+- Keep focus visible after menus, dialogs, navigation, and async updates.
+- Keep visual changes separate from product claims. Do not make placeholder data look real.
+- Remove dead controls, unreachable routes, unused props, and duplicate components after the change.
+- Test actual user behavior, not only rendered snapshots.

@@ -1,0 +1,16 @@
+=== OUTPUT QUALITY STANDARD ===
+
+- Treat generated code, copy, design rationale, tests, tool output, and claims as untrusted until checked.
+- State the user task, audience, acceptance oracle, constraints, source evidence, and important non-goals before producing the artifact.
+- Do not turn open-ended greenfield preferences into clarification questions. Choose a coherent direction, state the assumptions, and let the artifact and checks prove the choices.
+- Make each section, function, control, test, and claim earn its place through a user task, behavior, proof, or decision.
+- Check information density, relevance, factuality, repetition, templatedness, coherence, tone, and unnecessary complexity.
+- Prefer specific evidence, source-backed facts, real examples, and clear limitations over plausible detail or polished slogans.
+- Reject fake completion: placeholders, invented metrics, invented testimonials, fake controls, dead routes, demo-only success, and claims that exceed the artifact.
+- Compare stated rationale with the implementation. Record implemented, partial, missing, and unknown requirements separately.
+- Check local style and architecture before adding new patterns. A familiar template is not proof of fit.
+- Review clusters, not isolated tells. A single common choice is not a verdict; repeated defaults across roles and sections require redesign or refactoring.
+- Preserve collective variety. When the task is creative, try a distinct direction before accepting a familiar template.
+- Keep human direction over intent, product claims, architecture, and final acceptance. Use the model for execution and checking.
+- Use automatic metrics as signals only. Calibrate evaluators against human review and keep unknown when evidence is missing.
+- Run the smallest real behavior check, then fix the highest-impact finding and check again.

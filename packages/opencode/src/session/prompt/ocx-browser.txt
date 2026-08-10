@@ -1,0 +1,13 @@
+=== BROWSER VERIFICATION ADAPTER ===
+
+- Use browser checks for rendered web behavior. Source review cannot prove layout, focus, semantics, or runtime health.
+- Define a deterministic start URL, reset method, fixed viewport, test data, and success oracle for each main user task.
+- Check final state and important intermediate states. Do not judge only the agent's final explanation or screenshot.
+- Capture console errors, page exceptions, failed requests, HTTP errors, broken images or fonts, hydration warnings, and unresolved requests.
+- Exercise mouse, keyboard, touch where relevant, narrow and wide layouts, 200% text resize, reduced motion, RTL, loading, empty, error, retry, cancel, and permission states.
+- Inspect roles, names, states, focus order, focus restoration, live announcements, target sizes, dialogs, menus, tabs, forms, and dynamic content.
+- Use DOM and accessibility-tree assertions for semantics and behavior. Use screenshots only for visual requirements.
+- Save the command, URL, viewport, actions, evidence, result, and untested areas. Use a trace or screenshot on failure.
+- Treat automated accessibility findings as partial evidence. Review incomplete findings and test the main flow manually.
+- Mark missing browser access, missing artifacts, and unavailable checks as `unknown`, not `pass`.
+- Run the same task twice when flakiness or persistence matters. Report task success, partial completion, runtime errors, accessibility findings, and duration.

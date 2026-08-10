@@ -9,6 +9,7 @@ import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
+import PROMPT_ENGLISH from "../prompt/ocx-english.txt"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
@@ -55,15 +56,21 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
-  const system = [
-    [
-      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-      ...input.system,
-      ...(input.user.system ? [input.user.system] : []),
-    ]
-      .filter((x) => x)
-      .join("\n"),
+  const ocxPrompt = SystemPrompt.provider({
+    mode: input.agent.mode,
+    hidden: input.agent.hidden,
+    small: input.small,
+  })
+  const content = [
+    ...(input.agent.prompt ? [input.agent.prompt] : []),
+    ...ocxPrompt.filter((prompt) => prompt !== PROMPT_ENGLISH),
+    ...input.system,
+    ...(input.user.system ? [input.user.system] : []),
+    PROMPT_ENGLISH,
   ]
+    .filter((x) => x)
+    .join("\n")
+  const system = content ? [content] : []
 
   const header = system[0]
   yield* input.plugin.trigger(

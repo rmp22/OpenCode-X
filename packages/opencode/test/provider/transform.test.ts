@@ -560,8 +560,9 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
           mode: "primary",
           options: {},
           permission: [],
+          prompt: "Custom agent prompt",
         } as any,
-        system: [],
+        system: ["Later project instructions use complex words."],
         messages: [{ role: "user", content: "Hello" }],
         tools: {
           lookup: {
@@ -584,6 +585,13 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.params.options.reasoningSummary).toBeUndefined()
     expect(result.params.options.include).toBeUndefined()
     expect(result.tools.lookup.strict).toBe(false)
+    expect(result.system[0]).toContain("Custom agent prompt")
+    expect(result.system[0]).toContain("=== DESIGN ===")
+    expect(result.system[0]).toContain("Later project instructions use complex words.")
+    expect(result.system[0].match(/=== SIMPLE ENGLISH ===/g)).toHaveLength(1)
+    expect(result.system[0].lastIndexOf("=== SIMPLE ENGLISH ===")).toBeGreaterThan(
+      result.system[0].indexOf("Later project instructions use complex words."),
+    )
   })
 
   test("gpt-5.1 should have textVerbosity set to low", () => {

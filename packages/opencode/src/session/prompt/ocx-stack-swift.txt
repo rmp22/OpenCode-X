@@ -1,0 +1,9 @@
+=== SWIFT ADAPTER ===
+
+- Follow the project Swift version, package or Xcode layout, actor model, and platform targets.
+- Keep optional values and errors explicit. Do not force unwrap external or user data.
+- Preserve actor isolation, task cancellation, and lifecycle ownership.
+- Use the existing observation and state-management pattern instead of adding a second one.
+- Keep UI updates on the required actor and release observers, tasks, and resources.
+- Validate external data before mapping it into trusted models.
+- Test loading, empty, error, cancellation, accessibility, and lifecycle states.

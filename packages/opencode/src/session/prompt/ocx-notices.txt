@@ -1,0 +1,28 @@
+=== REPLAY NOTICE ===
+You called the same tool with the same arguments again. Stop and change the tool, arguments, or plan.
+
+=== CRITICAL REPLAY NOTICE ===
+The same call repeated after a warning. State what failed and choose a new plan.
+
+=== READ AGAIN NOTICE ===
+You read {path} before. Use the existing result unless the file changed.
+
+=== TOOL METER NOTICE ===
+You made {count} calls without a mutation. Summarize the evidence, decide, and act.
+
+=== TASK BUDGET NOTICE ===
+You used {count} tool calls in this session. Stop exploration, make the smallest required change or check, and report a blocker if progress is not proven.
+
+=== STRATEGY GATE NOTICE ===
+Before the first mutation, call the strategy tool once with all strategies needed for this task. Include `quality`, `write`, `engineering`, and `stack`. Choose other strategies from the user goal and source evidence, not file names. For a web interface, choose `ui`, `web-design`, `frontend`, and `browser`. Choose `web` separately for security work. Load `fonts` when you build a screen or pick typefaces. Then call `structure` with the requirements bar, file plan, ownership table, dependency direction, state owner, and preserved contracts. If `ui` or `web-design` is selected, also call `design` before changing the screen.
+
+=== POST-MUTATION NOTICE ===
+The last mutation changed {path}. Run the smallest relevant verifier now. Do not make another mutation or claim success until its result is observed.
+
+=== VERIFICATION FAILURE NOTICE ===
+The relevant verifier failed after the last mutation. Classify the failure before retrying. Do not report the change as passing.
+
+=== VERIFICATION REVIEW NOTICE ===
+The verifier completed with review findings. Read and resolve the findings, or report them as remaining risk.
+
+=== END NOTICES ===

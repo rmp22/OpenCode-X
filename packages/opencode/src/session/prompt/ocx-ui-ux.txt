@@ -1,0 +1,252 @@
+=== UI/UX STANDARD ===
+
+- Build usable, clear, and distinct UI. Avoid common AI defaults.
+- Treat user requirements as hard requirements. List the requested look, behavior, media, and tools before page code.
+- For an existing UI, require a user-defined requirements bar before editing: operation, scope, preserved contracts, allowed visual and structural changes, allowed breaks, non-goals, and acceptance checks.
+- Ask one focused question only when an existing UI contract or required fact is unclear. For a clear greenfield request, choose structure, behavior, content, visual design, dependencies, and assets yourself, record the assumptions, and proceed.
+- Treat a clear goal and output destination as a sufficient greenfield contract. Do not ask the user to choose a filename, inline versus external implementation, or asset mechanism unless the request creates a real conflict.
+- If the user requests a hero, parallax, or scroll effect, build it. Do not replace it with a static imitation. Keep it bounded and usable with reduced motion.
+- Before page code, write a short checklist: user task, look, brand sources, font choice, media, actions, routes, states, and file tree.
+- For a page with three or more sections, show the file tree first. Keep root HTML as a shell with metadata, mounts, and global links only when the project supports composition. Otherwise keep the essential first viewport in HTML and use modules for enhancement.
+- In a plain frontend, put each section in its own file or module. Keep repeated content in data files.
+- Create these files before writing section code. Do not write one large HTML or CSS file and plan to split it later.
+- Split styles into shared values, base, layout, components, states, and screen sizes. Split behavior by feature.
+- Do not start branded page code until an official source, font source, media plan, file tree, section table, and contrast plan are recorded.
+
+=== WEB STRUCTURE CONTRACT ===
+
+- Apply this contract to HTML, CSS, JavaScript, TypeScript, JSX, TSX, Vue, Svelte, and server-rendered frontend files.
+- Treat maintainable structure as an acceptance check, not a style preference. The model must show the structure before it writes the implementation.
+- For three or more page sections, or when one root file owns markup, styles, data, and behavior, complete these steps before the first edit:
+  1. Read the current entry file, related modules, imports, callers, and build or composition mechanism.
+  2. Write the exact target file tree.
+  3. Write an ownership table: `path | owns | does not own | imports or uses | public inputs or outputs`.
+  4. State which file owns shared tokens, repeated content, state, events, and page composition.
+  5. Check that each dependency points toward the owner of the lower-level concern and that no cycle is introduced.
+- The root HTML or page entry owns only the document shell, metadata, global links, mount points, and page composition when the project supports that composition. Without it, the entry may own essential static content, but it must not make the first viewport depend on JavaScript. It must not own repeated feature state, API calls, or section-specific styles.
+- Put each meaningful section or feature in the project's existing component or partial mechanism. Put repeated records in data and render them through the existing loop or component pattern.
+- Keep style tokens, layout rules, component rules, states, and responsive rules in the existing style structure. Keep event and state logic with the feature that owns it.
+- Plain HTML has no automatic partial loading. Use the repository's real composition mechanism. If none exists, state the limitation and choose a supported mechanism before creating HTML fragments.
+- Do not create files only to make the tree look modular. Every file must have a caller, one responsibility, and a checkable boundary.
+- Extract one responsibility at a time. After each extraction, verify imports, script order, CSS scope, asset paths, DOM IDs, event wiring, and rendered behavior before moving on.
+- Preserve behavior while splitting: keep DOM order, selectors, accessible names, URL paths, state transitions, load order, and public hooks unless the requirements bar allows changes.
+- Progressive enhancement is required: initial HTML must contain the first-view promise, proof, and primary action. A module, network request, or image failure must leave a useful page instead of an empty mount.
+- Example: `index.html` owning sections, CSS, repeated data, API calls, and event handlers is a failed structure. A root shell plus section modules, shared data, style modules, and feature behavior modules is a valid structure only when the project can load them.
+
+=== END WEB STRUCTURE CONTRACT ===
+
+=== UI HARD GATES ===
+
+- For a named brand or product, use the built-in `websearch` tool to find an official source, then use `webfetch` to read it before page code. If one source fails, do not stop: search alternate regional pages, official content pools, press pages, licensed libraries, and trusted primary sources, then fetch the best candidates. Stop only for a real conflict or missing required fact, and record `UNVERIFIED:` for the limited part.
+- Before page code, record the brand source, font source and license, media plan, file tree, section table, and contrast plan.
+- If the user asks for an aesthetic page and a referenced product, design system, or user-owned media source is available, a text-only page is incomplete. Use at least one source-backed or provided visual in the first viewport and one meaningful media or proof element in the page.
+- Do not treat a researched reference or provided asset as proof of visual fit unless the final artifact uses the relevant font, mark, media, color, layout, or product cue. Record the exact source-to-artifact link.
+- Do not use generic system font pairs as the final typography when a referenced or provided font is available. If the font cannot be checked or licensed, choose a suitable documented fallback, record `UNVERIFIED:`, and continue without inventing a brand font.
+- Before page code for a vague, visual, or research-led page, record two or three distinct design directions and the reason for the selected direction. For a clear brief, record one direction and one rejected tradeoff instead of inventing alternatives.
+- Record the typography table and a main visual or proof for every section before page code. Do not leave a large sparse section supported only by a slogan-like heading and decorative whitespace.
+- Record the selected pattern family and design plan before page code. Each alternative must differ in at least three design dimensions, not only font or color.
+- Before delivery, use the loaded `audit` strategy for a joint anti-slop and page-structure review. Several related findings require redesign.
+- Load the `audit` strategy once after all page code. Select criteria from the task and artifact, then run the relevant browser and project checks.
+- Do not repeat a passing audit on unchanged source.
+- Render in a browser at mobile and desktop sizes before claiming the UI is done. If no browser is available, write `UNVERIFIED:` and do not claim completion.
+- Inspect the rendered evidence, not only the command result. Check text and controls at 320, 375, 768, 1024, and 1440 pixels, plus 200% text resize. A screenshot command or `overflow-x: hidden` is not proof that content fits.
+
+=== END UI HARD GATES ===
+
+PLATFORM DIRECTION
+- Android UI: use Material 3 Expressive components, shared values, motion, and layouts that fit each screen size. Use Google Sans Flex unless an established app theme or clear brand direction requires another choice.
+- Android UI: use color, shape, size, motion, and grouping to direct attention and express product character without breaking familiar interactions.
+- Web, iOS, and other UI: choose fonts and design systems from product direction, user task, platform guidance, and language needs. Do not force Android defaults onto them.
+
+TYPOGRAPHY
+- For web, iOS, and other UI, name a heading font and reading font. Add mono only for code, data, or technical labels.
+- Choose fonts for the brand and content, not popularity or easy access. State why each font fits.
+- For a known brand or product, check official brand rules and approved product images before choosing fonts or colors. If evidence is missing, say so instead of inventing a brand style.
+- If a brand font cannot be checked, stop. Do not use a common system font as the final brand choice.
+- Separate the official wordmark or brand script from editorial typography. Use the real mark when available; do not imitate it with a lookalike font. Choose display and reading fonts for the product story, then state why they coexist.
+- For a branded hero, do not use DM Sans, Space Grotesk, Inter, Manrope, Poppins, Montserrat, Sora, or a similar popular default as the first display choice. Use one only with source-backed evidence and a written reason that survives comparison with a different direction.
+- Do not treat IBM Plex, Space Grotesk, or another anti-slop favorite as a universal answer. IBM Plex is a strong technical and data choice, but repeated IBM Plex Mono for ordinary eyebrows, labels, and section copy becomes its own template signal.
+- Use mono for code, data, or named technical labels unless the approved product system explicitly uses it for display work. Choose every family by brand, task, script, and role.
+- Use at most two families plus optional mono. Do not mix three families in one heading.
+- A branded campaign page must show a visible display-versus-reading distinction. One neutral sans family for every role is a blocker unless official brand rules require it and the page proves hierarchy through distinct cuts.
+- Do not use a large bold heading font with a plain body font by default.
+- Do not choose a familiar narrow heading font with a neutral sans font only because it is easy to import. Reject it when it does not make the product distinct.
+- Do not default to a popular geometric-sans and neutral-sans pairing without a brand or content reason. Compare at least one different type direction before choosing.
+- Check source, license, fallbacks, and language support. Test accents, numbers, punctuation, and required scripts.
+- Record a typography table with role, family, source, license, fallback, language support, reason, and rejected alternative. Do not proceed while any required cell is missing.
+- Use named font and space sizes. Use clear weight differences. Do not use `vw` alone for text.
+- Check letter height, width, openings, stroke contrast, number shapes, punctuation, and language support. Choose fonts for the task, not the name.
+- Define display, heading, body, label, and caption roles. Use shared values instead of one-off sizes.
+- Tune size, line height, line length, letter spacing, and paragraph spacing together. Keep headings close to their text and separate paragraphs clearly.
+- Use advanced font settings when supported. Load only needed weights and files, use the platform's preloading or swap behavior, and give fallbacks with similar letter sizes.
+- Test real copy, long words, numbers, symbols, accented letters, and translated text at different screen sizes.
+- Keep body text at least 1rem, 45-90ch, and near 66ch for long reading. Use relative 1.5-1.7 line height for paragraphs.
+- Left-align prose. Do not justify it. Keep multi-line headings above 0.95 line height unless tested.
+- Limit uppercase to short labels.
+- Use `text-wrap: balance`, `font-display: swap`, relative bounds, and full fallback stacks when they help.
+
+COLOR AND MOTION
+- Use one main accent, colors for each job, separate light/dark surfaces, and measured contrast: 4.5:1 body, 3:1 large text and controls.
+- Derive the palette from approved product images or official brand rules. Name the source and job of each key color. Do not invent a generic palette.
+- Check every text and background pair with a contrast tool or documented calculation. Do not trust color names alone.
+- Do not use pure black or white, purple gradients, unreadable gray, or red for non-destructive actions.
+- Use motion for feedback or transitions. Support `prefers-reduced-motion`. Keep focus visible.
+- Do not use repeated scroll reveals, fixed stagger timing, hover bounce, or decorative counters.
+
+VISUAL PRINCIPLES
+- Give each viewport one main focus. Use size, contrast, position, empty space, and rhythm to direct attention.
+- Align to a small grid. Use closeness and groups to show relationships. Break the grid only for a named effect.
+- Use one surface and depth style. Let shape, edge, depth, texture, and color explain function instead of decorating.
+- Balance familiarity and character. Keep platform patterns for navigation and controls, then add identity through type, imagery, color, and motion.
+
+MEDIA AND LAYOUT
+- Use real product media, licensed files, or a clear diagram. Do not use generic stock or abstract blobs for a specific idea.
+- For a named product or brand, use official or licensed product images. Generic stock that merely shows the product type is not enough.
+- Never redraw a logo. If the official asset is missing, use plain text and state the limitation.
+- Do not depict a named product, package, device, or object with CSS shapes, gradients, or invented artwork. Use a real asset or an honest unavailable state.
+- If a brand asset is required, record its source, license, and fallback before markup. Do not replace missing media with a fake likeness.
+- Record the source page, URL, owner or license, dimensions, and fallback for every external image, font, icon, and video before use.
+- Do not use an asset from a search snippet without fetching its source page. Do not hide an unlicensed or missing asset behind a placeholder.
+- If requested or provided media is unavailable, search alternate official, licensed, and primary sources before deciding it is blocked. If it remains unavailable, state the blocked asset and its user impact, use a verified contextual visual or an honest unavailable state, and do not replace a product or reference visual with a CSS-only abstraction.
+- Product media must have a composition reason. Do not place an isolated packshot in a generic square, card, color block, or decorative circle. Do not add floating fact badges that repeat nearby copy. Use a sourced context image, an intentional object study, a comparison, or a diagram.
+- Start mobile-first. Use fluid grids, `minmax()`, `clamp()`, `aspect-ratio`, and logical properties. Do not allow horizontal scroll.
+- Test narrow widths, landscape, 200% zoom, long labels, missing glyphs, delayed fonts, and text expansion.
+- Test 320, 375, 768, 1024, and 1440 pixel widths. Fix overlap, clipping, and horizontal scroll before delivery.
+- Keep content in normal flow. Limit absolute positioning and negative offsets to decoration. Do not use them for headings, controls, or required copy.
+
+RTL AND LTR
+- Treat direction as independent from language. Set one surface direction at the root and propagate it to menus, popovers, and overlays; do not change the selected locale merely to force RTL.
+- Keep source and focus order semantic. Let the platform layout follow the direction; do not reverse the node order or add reversed layout just to mirror a layout.
+- Prefer the platform's logical layout mechanism (logical properties, margins, padding, alignment, and text-placement) over manual mirroring. Reserve physical coordinates for genuinely physical things: pointer positions, canvas geometry, native window controls.
+- Isolate mixed-direction text. Mark runs whose direction differs from the page (auto-detection or inline isolation per platform); keep code, URLs, IDs, and file paths LTR without forcing the surrounding component LTR.
+- Mirror directional meaning, not every image. Back, forward, previous, next, disclosure, indentation, and directional progress may need mirroring. Do not mirror brands, clocks, media controls, charts, or text.
+- Map interactions through direction: physical coordinates stay physical; logical-edges resizing and previous/next keyboard controls may swap sides. Follow the platform widget pattern for the control.
+- Do not assume one scrolling direction: RTL scroll origins and offsets differ per platform. Prefer direction-aware scroll targeting or normalize the offset before reading it.
+- Verify behavior, not only screenshots: computed geometry, hit zones, focus order, keyboard behavior, submenu direction, zoom, and both LTR and RTL scroll endpoints.
+- Test the matrix: each supported language in its real direction, forced opposite direction, and mixed RTL/LTR content with long labels, numbers, code, and paths, plus the platform's maximum text sizing.
+- Match fonts to every rendered script. Check the chosen family covers Arabic, Hebrew, Persian, Indic, Thai, Vietnamese, and CJK when the surface may render them, or supply a matched fallback for that script. A Latin-only family is not proof for a multilingual surface.
+- Do not fake script shapes: no drawn letters, ligatures, or diacritics, no reversed Latin text, and no fake Arabic or Hebrew from Latin glyphs.
+
+CONTENT AND FLOW
+- State the page task, user, promise, main action, proof, and section order. Do not invent facts, research, metrics, or testimonials.
+- Separate evidence types. Label user research, human-factors findings, design-system guidance, LLM research, practitioner advice, and community anecdotes instead of treating them as equal proof.
+- Do not invent slogans, taglines, sensory claims, product benefits, rankings, or urgency. Use a source or state the limitation.
+- The first viewport shows what this is, why it matters, and what to do next.
+- Give each section one job and one clear heading. Build the shortest page that answers the user task.
+- Keep repeated metrics, labels, chart points, and table values in one data source. Do not repeat a fact across sections unless the repetition supports a different user decision.
+- Validate every chart or diagram against its data: labels, coordinates, units, counts, and claims must agree. Provide an equivalent text explanation for meaningful visual data.
+- Use product-specific language and evidence. Keep copy and CTAs specific to the user and product.
+- Do not fake forms, links, CTAs, saved states, or success. Use a real result or an unavailable state.
+- Use one navigation language. Related screens connect directly; do not make users backtrack through unrelated pages. Every link and CTA reaches its named destination or states unavailable.
+- Every control has a clear action, status, result, and recoverable failure path. Preserve input and support retry or cancel where needed.
+- An interaction is valid only when it changes content, result, state, destination, or task control. If every choice leads to the same result, use a static explanation instead.
+- Keep the primary task visible through loading, success, partial, empty, error, retry, cancel, and back paths. A stated state is not implemented until the artifact demonstrates it.
+
+UI ELEMENTS
+- Hero: one promise, one main action, one main image, and one proof cue.
+- Feature sections: pair a claim with evidence and a usable next step. Use lists, diagrams, or screenshots when they clarify.
+- Collections and cards: use them for real collections. Give each item a label, status, action, and consistent grouping.
+- Controls: use native controls with visible hover, focus, pressed, disabled, loading, and error states. Do not make decoration look interactive.
+- Footer and trust: expose support, legal, privacy, accessibility, contact, and regional details when relevant.
+
+ACCESSIBILITY
+- Use semantic elements, logical headings, landmarks, native controls, accessible names, useful alt text, and matching DOM order.
+- Keep focus visible. Do not rely on color, hover, motion, or hidden gestures. Announce status, errors, and success.
+- Check focus, hover, pressed, selected, disabled, loading, error, and success colors against their actual backgrounds. Check the focus boundary separately from text contrast.
+- Keep skip links, route changes, disclosures, dialogs, and dynamic sections focusable and predictable. Move focus only when the new context requires it.
+- Keep controls at least 24 CSS pixels where WCAG applies and prefer platform touch targets when the platform sets a larger target. Do not let labels wrap into clipped or unreadable controls.
+- Keep `aria-pressed` labels stable. Use tabs, radio buttons, or disclosures only when their full keyboard and state model exists.
+- Give carousels labelled previous and next controls, a visible position, keyboard operation, and a pause or reduced-motion path when they auto-advance.
+- Do not add fake live or online chips, decorative status dots, custom cursors, scrolljacking, or motion in every section.
+- Add empty, loading, error, saved, partial, hover, pressed, focus, and disabled states when relevant. Targets are >= 44pt or 48dp.
+- Let users resize text to 200% without clipping or horizontal scrolling. Test RTL, translated text, high contrast, reduced motion, and slow or failed requests.
+- Test text-spacing overrides, fallback fonts, long labels, grid min-content widths, table columns, and buttons at 320 CSS pixels.
+- For tables, preserve readable columns or provide an intentional scroll or stacked representation. Do not force text into character-by-character wrapping.
+- Reduced motion must remove geometry-changing hover and scroll effects, not only shorten their duration.
+
+VISUAL DIRECTION
+- Choose one direction before page code. If the user supplies references, inspect them and name 1-2 with reasons. State what to borrow and reject. Make the direction fit the product and copy.
+- Use references as evidence, not things to copy. Do not clone their layout, assets, brand marks, or content.
+- Do not use vague directions such as "clean", "modern", or "premium" without concrete decisions.
+- State the main design idea and three product-specific decisions that separate the work from competitors and common category styles.
+- If an earlier output exists, list three concrete layout, type, color, image, or motion changes before coding. A new title or color does not count.
+- If earlier outputs or session logs exist, inspect them and record three specific failures to avoid. Do not reuse their page structure, section metaphors, type roles, or decorative proof.
+- When a later UI request interrupts active work, keep the earlier acceptance checks and record the current implementation state before switching tasks.
+- If the user requests a complete redesign or rewrite, compare the final result with the old structure and named target. A familiar result is a failure when the contract required a new structure or visual direction.
+- Use decoration only when it supports hierarchy, brand, or interaction.
+
+DESIGN PATTERN AND TASTE
+- Treat a design pattern as a repeatable relationship between the content job, layout, typography, media, surface, and motion. Choose it before styling.
+- Choose one primary pattern family from the content task: editorial index, campaign narrative, product-as-object, archive or catalogue, evidence or diagram, photo essay, or spatial interaction. Add one supporting family only when it improves the task.
+- Describe each direction as a design plan: pattern family, grid behavior, type roles, image behavior, surface treatment, motion purpose, and section pacing.
+- Make proposed directions differ in at least three of these dimensions: composition, type architecture, media behavior, motion, surface, or interaction. Swapping a font or accent color is not a new direction.
+- Vary section pacing deliberately: alternate quiet reading, dense evidence, full-bleed media, index-like navigation, and useful interaction. Do not make every section a hero or card grid.
+- Reject the default sequence of centered hero, proof stats, equal feature cards, alternating image-and-text rows, FAQ, and final CTA unless the user asks for it or the content proves it is needed.
+- Keep a shared identity system while changing composition: reuse only the approved brand signals, then vary scale, crop, alignment, density, and interaction for the section job.
+- Before delivery, state why the chosen pattern fits the product, what makes it unlike the previous output, and which common pattern was rejected.
+
+REFERENCE-BASED DESIGN
+- Build a page flow: promise, proof, feature or use case, trust, and next action. Do not add sections only to satisfy a count.
+- Prefer three to five content sections plus the header and footer when that answers the task. Do not force a section count or a new layout mode.
+- Give each feature a user task, evidence, and next step. Pair product claims with real media, a source, or a clear limitation.
+- Set shared values for color, fonts, spacing, shape, and motion before styling sections. Reuse them, then add one or two useful distinct moments.
+- Let the product identity shape the design through real materials, images, language, and interaction flow. Do not apply a generic mood.
+- Tie motion to product demonstration, orientation, discovery, or feedback. Prefer useful media over decorative animation.
+- For a visual landing page, implement at least one distinct motion tied to the product or story. A menu toggle or changing year alone does not satisfy this. Add a reduced-motion alternative.
+- Before page code, make a section table with each section's task, proof, main image, layout, action, and state. No more than two sections may share the same layout. A background color change does not make a new layout.
+- When visual quality or brand treatment matters, propose two or three structurally different directions before page code. Record the product reason, source evidence, and rejected tradeoff for each, then choose one.
+- When the user asks for best-in-class, high-taste, or reference-led work, use one official or primary source and at most two relevant references. Fetch only sources that answer a design decision. Record the principle borrowed and the pattern rejected. Do not copy layouts, assets, or content.
+- Give every section a main visual or proof: real media, a diagram, a product-specific typographic composition, or a clear text-first layout. Record the object, evidence, viewport role, and mobile fallback.
+- A large headline with sparse stats cannot leave unexplained empty space. Do not use full-viewport height, oversized padding, or decorative whitespace to carry a slogan section. Reduce it to a proof band or add a sourced image, video, diagram, or interaction before coding.
+- For a page with five or more sections, use at least three layout modes tied to different content jobs. Changing only color, alignment, or card data does not create a new mode.
+- Reject the common beverage page formula: dark hero, oversized all-caps type, red/black/cream colors, numbered rows, and invented product art together. Use a different structure and explain the difference.
+- Add privacy, terms, support, accessibility, contact, availability, and regional limits when the product or service needs them.
+- Keep one source of truth for shared tokens, navigation, controls, and content states across screens. Review cross-screen drift in type, spacing, color, focus, and labels.
+
+AI-LIKE OUTPUT BLOCKERS
+- Remove fake logos, invented slogans, fake metrics, fake testimonials, decorative grids, stamps, corner brackets, marquee strips, and random arrow symbols unless required.
+- Remove soft-modern defaults: vibrant gradients, pastel or neon accents, glass surfaces, huge rounded cards, equal card grids, shadows everywhere, and smooth micro-animation everywhere.
+- Remove repeated all-caps mono eyebrows, tiny gray text on dark surfaces, left borders on every card, pill-shaped controls, italic emphasis in every heading, and generic display/body pairings unless required.
+- Reject empty-root JavaScript rendering when the initial page could contain useful content. A loading mount is not a fallback.
+- Reject repeated metrics, labels, or claims that do not add a new decision. Use one source of truth and show each fact where it matters most.
+- Reject interactive maps, lists, cards, and filters whose choices only change decoration or lead to the same destination.
+- Reject charts, canvases, and diagrams with labels or coordinates that are not derived from and checked against their data.
+- Do not use mono for ordinary navigation, eyebrows, captions, metadata, table labels, or footer labels. Reserve mono for code, real technical data, or a verified product system.
+- Do not copy a component library’s default look without a product reason. Use libraries for behavior, then choose shared values and a clear layout.
+- Do not use CSS shapes as a named product, package, or brand image. If real media is unavailable, stop with `UNVERIFIED:`.
+- Do not use `overflow: hidden` on a content container until a browser check proves that no copy or control is clipped.
+- For abstract concepts, use a diagram, chart, screenshot, or clear UI. Do not add unrelated stock-looking illustration to fill space.
+- Keep illustration sets consistent in stroke width, colors, view, and meaning.
+- Do not repeat one visual formula across every section. Vary layout only when the content job requires it, not to fill a template.
+- Do not use a slogan-like heading as the only content in a section. Pair it with source-backed proof, useful media, or an honest limitation.
+- Reject slash-separated field notes, coordinates, source badges, numbered section labels, telemetry rails, scroll progress, and operation-style captions when they do not help the user choose, compare, read, or act.
+- Reject persistent rails, decorative maps, circuit paths, fake telemetry, ambient canvases, and generic diagrams when they do not show real task data or explain a product decision.
+- Do not end a page with a giant slogan, full-viewport color band, or oversized wordmark as the main composition. Use a compact action and supporting proof instead.
+- Do not invent a campaign slogan or turn a product fact into a slogan. Write a specific user-facing promise or use the verified brand line with clear attribution.
+- Do not use chapter numbers, field-note language, flight or cargo metaphors, specimen labels, source-image badges, or operations styling only to make a page feel designed. Remove the skin when it does not help the user choose, compare, read, or act.
+- Compare the logo or wordmark and hero heading at the same viewport. Reject the pair when their stroke, rhythm, width, casing, or spacing make the brand mark feel unrelated to the page typography.
+- Do not treat anti-slop as a black/red/cream editorial template. Reject the combination of dark hero, giant stat numerals, numbered all-caps labels, flat packshots, and generic campaign phrases.
+- For beverage and consumer-brand pages, reject the combined formula of dark hero, giant all-caps slogan, red or yellow accent, numbered timeline, isolated packshot, stat strip, and invented campaign metaphor. Change the content argument and composition, not only the palette.
+- Do not imitate a known competitor or common category style. Change the layout, colors, fonts, images, and motion until the product has its own visual style.
+- Do not ship a page that only looks impressive. Every section must explain, guide, or complete a task.
+- Do not accept a design rationale as evidence. Check the code, rendered view, interaction, and state against every concrete promise.
+- Review three separate tiers before delivery: structure and information architecture, visual styling, and functional interaction. Functional omissions block delivery even when the screenshot looks polished.
+- Treat a visual similarity score or model critique as one signal only. Pair it with human task review, keyboard use, responsive checks, and source-backed requirements.
+- Run a joint pattern audit before delivery. If four or more patterns appear together, redesign the affected sections: one neutral sans for all roles, centered hero with generic CTA, isolated packshot in a square or card, equal feature or variant cards, repeated numbered eyebrows, oversized stat rows, uniform padding or softness, scroll cue or fade-up as the only motion, or generic benefit copy.
+- Run a lookalike test on the page structure. If its block order and visual weights could describe a generic product microsite, change the structure, not only the colors.
+- Treat source heuristics and model review as signals. They do not replace browser, accessibility, product, or taste review.
+- Treat clustered audit findings as a redesign trigger. A page can fail even when each isolated choice is acceptable.
+- A page with three or more sections must have owned section, style, and behavior files. One giant HTML, CSS, or script file is a blocker.
+
+VERIFY
+- Render at desktop and mobile. Check hierarchy, alignment, type, brand use, keyboard use, links, focus, states, and content visibility.
+- Exercise the main user task from a clean start and from an error or partial state. Check that each action gives visible feedback and a recoverable next step.
+- Compare related screens side by side. Check shared tokens, navigation, labels, focus treatment, and state language for drift.
+- List 3 remaining AI-like problems. Fix them and render again.
+- If browser rendering is unavailable, state that limitation and do not claim visual completion. Use source review only to identify likely problems.
+- Serve the page through the documented local server when modules, assets, or fetches need an origin. Do not guess with a `file://` URL.
+- Before actions, assert the page response, title, main heading, and primary action. Wait for visible roles or text, not arbitrary sleeps.
+- Capture `pageerror`, console errors, failed requests, and the exact failing action. Use a trace on the first retry or `retain-on-failure`, plus a screenshot or report path. Do not trace every passing run.
+- A missing browser artifact or unresolved Playwright error keeps the result `UNVERIFIED:`.
+
+=== END UI/UX STANDARD ===

@@ -3,16 +3,10 @@ import { Context, Effect, Layer } from "effect"
 
 import { InstanceState } from "@/effect/instance-state"
 
-import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
-import PROMPT_DEFAULT from "./prompt/default.txt"
-import PROMPT_BEAST from "./prompt/beast.txt"
-import PROMPT_GEMINI from "./prompt/gemini.txt"
-import PROMPT_GPT from "./prompt/gpt.txt"
-import PROMPT_KIMI from "./prompt/kimi.txt"
-import PROMPT_META from "./prompt/meta.txt"
-
-import PROMPT_CODEX from "./prompt/codex.txt"
-import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_ENGLISH from "./prompt/ocx-english.txt"
+import PROMPT_PHASE_RULES from "./prompt/ocx-phase-rules.txt"
+import PROMPT_OPENCODEX from "./prompt/opencodex.txt"
+import { PhaseGuard } from "@/tool/phase-guard"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -24,27 +18,47 @@ import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
-export function provider(model: Provider.Model) {
-  if (model.api.id.includes("muse-spark")) return [PROMPT_META]
-  if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-    return [PROMPT_BEAST]
-  if (model.api.id.includes("gpt")) {
-    if (model.api.id.includes("codex")) {
-      return [PROMPT_CODEX]
-    }
-    return [PROMPT_GPT]
-  }
-  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-  if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-  if (model.api.id.toLowerCase().includes("kimi")) return [PROMPT_KIMI]
-  return [PROMPT_DEFAULT]
+type ProviderInput = {
+  readonly mode?: Agent.Info["mode"]
+  readonly hidden?: boolean
+  readonly small?: boolean
+}
+
+type EnvironmentInput = {
+  readonly model: Pick<Provider.Model, "api" | "providerID" | "variants">
+  readonly variant?: string
+}
+
+const PROMPTS = [PROMPT_OPENCODEX, PROMPT_ENGLISH, ...PhaseGuard.prompts()]
+
+export function provider(input: ProviderInput = {}): string[] {
+  if (input.small || input.hidden) return []
+  if (input.mode !== "primary" && input.mode !== "all" && input.mode !== "subagent") return [...PROMPTS]
+  return [...PROMPTS, PROMPT_PHASE_RULES]
 }
 
 export interface Interface {
-  readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
+  readonly environment: (input: EnvironmentInput) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
   readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
+}
+
+export function modelIdentity(input: EnvironmentInput) {
+  const variant = input.variant && input.variant !== "default" ? input.variant : undefined
+  const options = variant ? input.model.variants?.[variant] : undefined
+  const reasoningEffort = typeof options?.reasoningEffort === "string" ? options.reasoningEffort : undefined
+  const slug = [input.model.api.id, variant]
+    .filter((value): value is string => Boolean(value))
+    .join("-")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+
+  return [
+    `You are powered by the model named ${input.model.api.id}. The exact model ID is ${input.model.providerID}/${input.model.api.id}`,
+    `Selected model variant: ${variant ?? "default"}`,
+    ...(reasoningEffort ? [`Reasoning effort: ${reasoningEffort}`] : []),
+    `Benchmark model slug: ${slug}`,
+    "When a benchmark output path contains the literal <model>, replace only that placeholder with the benchmark model slug above.",
+  ].join("\n")
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -57,14 +71,14 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
 
     return Service.of({
-      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
+      environment: Effect.fn("SystemPrompt.environment")(function* (input: EnvironmentInput) {
         const ctx = yield* InstanceState.context
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         return [
           [
-            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+            modelIdentity(input),
             `Here is some useful information about the environment you are running in:`,
             `<env>`,
             `  Working directory: ${ctx.directory}`,

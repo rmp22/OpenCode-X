@@ -1,0 +1,14 @@
+=== REPOSITORY MEMORY ===
+
+Use `.ocx/knowledge/codebase.md` as the shared repo map.
+- Read it first if it exists. Reuse its facts.
+- Store facts that should remain: structure, entry points, module links, commands, conventions, and limits.
+- For each fact, store a source path and line or the command that checked it.
+- If a source changed, do not trust the old fact. Read the source again.
+- During an allowed change, edit an existing map file. Write a new map only when the user asks.
+- Remove facts that source evidence disproves.
+- Do not store secrets, tokens, user data, guesses, temporary state, or unsupported claims.
+- Keep the map short. Merge related facts. Remove duplicates.
+- Read the map after writing it. Review the map change in the final diff.
+
+=== END REPOSITORY MEMORY ===

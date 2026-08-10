@@ -1,0 +1,12 @@
+=== C AND C++ ADAPTER ===
+
+- Read the compiler standard, build files, ownership rules, and sanitizer setup first.
+- In AOSP or Android platform code, follow the checked-in Android.bp or CMake structure and the approved Google or AOSP C++ style.
+- Keep IPC, HAL, and platform interfaces versioned and documented. Do not change a published interface without a compatibility plan.
+- Make ownership and lifetime visible. Prefer RAII and the existing smart-pointer policy.
+- Use a struct for a passive value type and a class when invariants or ownership behavior need an interface. Do not add boilerplate accessors without a real boundary.
+- Avoid raw owning pointers, unchecked casts, undefined behavior, and unbounded string operations.
+- Validate lengths, encodings, indexes, and external input before use.
+- Preserve lock, thread, exception, and cleanup behavior across every path.
+- Keep platform code behind the existing boundary.
+- Run formatter, compiler warnings, sanitizers, and focused tests when documented.

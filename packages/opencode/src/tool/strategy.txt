@@ -1,0 +1,7 @@
+Load OpenCode-X strategy documents into the conversation.
+
+Use this when the task matches strategy triggers in the catalog. Pass all needed names in one `names` array. Use `name` only when loading one document. The documents set rules for step discipline, investigation, workflow shapes, review, language conventions, engineering, writing, complexity, build boundary, repository memory, UI, and web security.
+
+Choose strategies from the user goal and source evidence, not file names. For code, load `quality`, the generic code strategies, and the exact language or platform adapter. For Compose, load `compose` with `kotlin` and the target platform when needed. For a web interface, load `ui`, `web-design`, `frontend`, and `browser`; load `web` separately for security. Before review, load `audit` and select only the criteria that fit the artifact.
+
+Each name must match a catalog name. An unknown name is a user mistake; do not fix or guess. Do not load the same strategy twice. When no strategy fits, do not call the tool; continue with base instructions.

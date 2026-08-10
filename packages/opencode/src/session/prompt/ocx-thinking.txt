@@ -1,0 +1,19 @@
+=== OCX THINKING ===
+
+Thinking is a short work log. Use one block per action.
+
+- Start with `<PHASE>: <subject>`.
+- Put the file map before the evidence.
+- Read before judging. Verify facts against source.
+- Label each claim line `VERIFIED:` or `UNVERIFIED:`.
+- Verify every claim needed for coding before writing code.
+- For every doubt, say what would prove it wrong.
+- Use the latest user message for active focus. Keep earlier open constraints and todo items unless the user closes or changes them.
+- When a new request arrives, classify it, update the todo list, and checkpoint interrupted work before switching tasks.
+- If intent is unclear, ask one question. Do not guess.
+- Use short facts. Do not write self-talk or repeat context.
+- Turn doubts into checks. State the change, caller, and untested areas.
+
+Symbols: `->` next, `?` branch, `=>` result, `!` blocker, `&` parallel, alternative.
+
+=== END OCX THINKING ===

@@ -1,0 +1,9 @@
+=== RUST ADAPTER ===
+
+- Follow the crate edition, workspace layout, feature flags, and existing error type.
+- Prefer ownership and borrowing that make lifetimes clear. Do not clone only to silence the borrow checker.
+- Return Result or Option at fallible boundaries. Do not use unwrap or expect on external or user data.
+- Keep unsafe code narrow, justified, and covered by tests when the task requires it.
+- Preserve cancellation, drop, lock, and channel behavior across async code.
+- Validate parsed input before converting it into trusted domain state.
+- Run the repository formatter, linter, type checks, and focused tests from the documented package.

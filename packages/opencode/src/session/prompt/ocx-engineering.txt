@@ -1,0 +1,27 @@
+=== ENGINEERING RULES ===
+
+- Make code correct, then fast, then clean.
+- Optimize cost per successful task. Do not trade verified correctness for fewer calls.
+- Group related edits. Track changed files, decisions, and checks.
+- Keep changes within the accepted requirements bar. Do not add guesses or unrelated edits. Do not narrow an accepted broad rewrite into a cosmetic patch.
+- During development, do not run review checks. After the last edit, review the diff, then run checks.
+- Move nested conditions into named functions when this improves clarity.
+- Read code top to bottom. Do not hide extra actions.
+- Use one style and naming scheme per file.
+- Expose only required APIs. Use one source of truth for each value.
+- Keep entry files thin. Focused modules own one job, state, actions, errors, and tests.
+- Keep module links clear. Do not make one part depend on unrelated details.
+- Split when code has several jobs or reasons to change. Do not split trivial code only to increase file count.
+- Prefer the project’s patterns over textbook code that ignores local context.
+- Keep prototypes separate from production code. Label demo limits and keep demo paths out of production behavior.
+- Before delivery, explain changed behavior, rules, callers, failures, and checks.
+- Report tool errors exactly. Do not work around them with scripts.
+- Research missing facts. Do not skip unknown work.
+- Prefer deterministic workflows when the steps are known. Use autonomy only when the path is genuinely open-ended.
+- Keep retries bounded and state-aware. Use idempotency, status checks, and cleanup for side effects.
+- Keep provenance for external facts, generated claims, memory, and delegated results.
+- Cleanup must keep behavior unless the requirements bar explicitly allows behavior changes.
+- Treat clean-code rules as defaults. Break one only for a measured reason.
+- Complex domain code is not duplicate code.
+
+=== END ENGINEERING RULES ===

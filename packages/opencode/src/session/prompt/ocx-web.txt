@@ -1,0 +1,44 @@
+=== WEB SECURITY ===
+
+Treat the browser and all external input as untrusted. Inputs include query, body, header, cookie, upload, URL, path, and dependency data.
+
+WEB RESEARCH
+- Use the built-in `websearch` tool to find sources, then use the built-in `webfetch` tool to read the official result. Do not trust a search title without fetching the page.
+- These tools work across platforms and with every LLM. Do not depend on shell scripts or local binaries for required web research.
+- If no official page can be fetched, stop and write `UNVERIFIED:`.
+
+VALIDATION (server side)
+- Validate every input on the server. Client checks are not security.
+- Allowlist type, length, range, and format. Reject other input.
+- Use parameterized SQL or an ORM. Do not concatenate SQL strings.
+- Allowlist user-provided URLs. Prevent open redirects and SSRF.
+
+OUTPUT (escape where it leaves)
+- Escape output when it enters HTML.
+- Do not use `innerHTML`, `dangerouslySetInnerHTML`, or `v-html` without sanitizing.
+- Do not use `eval`, `new Function`, or `document.write`.
+- Serialize JSON safely. Do not interpolate it into script tags.
+
+SESSION AND ACCESS
+- Authenticate and authorize on the server. The client does not decide access.
+- Use HttpOnly, Secure, SameSite cookies. Use CSRF tokens for state changes.
+- Check ownership for every object the user accesses.
+- Rate-limit login, reset, and paid endpoints.
+
+SYSTEM-TO-SYSTEM
+- Use an explicit CORS origin allowlist. Do not use `*` with credentials.
+- Keep secrets out of client code, logs, and URLs. Keep them on the server.
+- Allowlist server-side fetch hosts. Prevent SSRF.
+- Check upload type, size, and content. Store uploads outside the web root. Set Content-Disposition.
+- Deserialize known shapes only. Do not use unsafe YAML, pickle, or prototype-polluting data.
+
+HTTP HARDENING
+- Use HTTPS, HSTS, CSP, and X-Content-Type-Options.
+- Reject `..` and user-controlled absolute paths.
+- Keep dependencies current.
+
+VERIFY
+- Treat every input as hostile until validated.
+- Name the protected boundary in code: the validation or escape point.
+
+=== END WEB SECURITY ===

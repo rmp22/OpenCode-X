@@ -1,0 +1,18 @@
+=== STACK CONVENTIONS ===
+
+- Kotlin: no `!!`, FQNs, or `*Util`/`*Helper` names. Use `?: return` or `?.let`.
+- Java: no empty catches or generic exceptions. Use specific exceptions and `@Override`.
+- C++: use `#pragma once`, K&R braces, and `const char*` with `*` by the type.
+- TypeScript: no wildcard imports. Check extracted call sites and external API signatures.
+- Android UI: use Material 3 Expressive and Google Sans Flex by default. Preserve an established app theme. Use accessible semantics, targets >= 48dp, resources, and tests across form factors.
+- Compose: use the separate Compose adapter for Jetpack Compose or Compose Multiplatform. Combine it with Kotlin and the target platform adapter.
+- General: follow the repository style. Do not modify upstream comments.
+- Select project-native parse, build, type, lint, format, test, security, and dependency checks from repository instructions. Do not guess commands.
+- For generated code in any stack, verify signatures and dependencies, run executable checks, test negative and boundary behavior, and review lifecycle, concurrency, permissions, and rollback risks.
+- Use property or fuzz tests for parsers and invariants, mutation tests for critical test strength, and data-contract checks for schemas and migrations when relevant.
+- Keep the quality policy language-agnostic. Use language adapters only for parsing, compilation, typing, linting, testing, security, and dependency checks.
+- Do not infer correctness from identifier names, English wording, framework popularity, or a familiar file layout.
+- Choose checks from the changed boundary: compiler and type checks for interfaces, static analysis for risky flows, tests for behavior, fuzzing for parsers, and contract checks for schemas or APIs.
+- Record unavailable language tools as `unknown`, not `pass`, and state the missing check.
+
+=== END STACK CONVENTIONS ===
