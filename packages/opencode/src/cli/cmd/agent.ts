@@ -1,10 +1,10 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
+import { ConfigPaths } from "@/config/paths"
 import matter from "gray-matter"
 import { EOL } from "os"
 import type { Argv } from "yargs"
@@ -101,14 +101,17 @@ const AgentCreateCommand = effectCmd({
               {
                 label: "Global",
                 value: "global" as const,
-                hint: Global.Path.config,
+                hint: ConfigPaths.globalDirectory(),
               },
             ],
           })
           if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
           scope = scopeResult
         }
-        targetPath = path.join(scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"), "agents")
+        targetPath = path.join(
+          scope === "global" ? ConfigPaths.globalDirectory() : path.join(ctx.worktree, ConfigPaths.PROJECT_DIRECTORY),
+          "agents",
+        )
       }
 
       // Get description

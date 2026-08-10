@@ -6,6 +6,7 @@ import { fileURLToPath } from "url"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
+const executable = "ocx"
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
@@ -35,7 +36,7 @@ await $`mkdir -p ./dist/${pkg.name}`
 await $`mkdir -p ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
-await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
+await Bun.file(`./dist/${pkg.name}/bin/${executable}.exe`).write(
   [
     `echo "Error: ${pkg.name}-ai's postinstall script was not run." >&2`,
     'echo "" >&2',
@@ -56,7 +57,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}.exe`,
+        [executable]: `./bin/${executable}.exe`,
       },
       scripts: {
         postinstall: "node ./postinstall.mjs",
@@ -119,7 +120,7 @@ if (!Script.preview) {
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    `  install -Dm755 ./${executable} "\${pkgdir}/usr/bin/${executable}"`,
     "}",
     "",
   ].join("\n")
@@ -162,7 +163,7 @@ if (!Script.preview) {
     `      sha256 "${macX64Sha}"`,
     "",
     "      def install",
-    '        bin.install "opencode"',
+    `        bin.install "${executable}"`,
     "      end",
     "    end",
     "    if Hardware::CPU.arm?",
@@ -170,7 +171,7 @@ if (!Script.preview) {
     `      sha256 "${macArm64Sha}"`,
     "",
     "      def install",
-    '        bin.install "opencode"',
+    `        bin.install "${executable}"`,
     "      end",
     "    end",
     "  end",
@@ -180,14 +181,14 @@ if (!Script.preview) {
     `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
     `      sha256 "${x64Sha}"`,
     "      def install",
-    '        bin.install "opencode"',
+    `        bin.install "${executable}"`,
     "      end",
     "    end",
     "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
     `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
     `      sha256 "${arm64Sha}"`,
     "      def install",
-    '        bin.install "opencode"',
+    `        bin.install "${executable}"`,
     "      end",
     "    end",
     "  end",

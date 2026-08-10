@@ -48,7 +48,7 @@ const layer = Layer.effectDiscard(
           Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
             ? []
             : yield* fs.up({
-                targets: ["AGENTS.md"],
+                targets: ["AGENTS.md", join(".ocx", "AGENTS.md")],
                 start,
                 stop,
               }),

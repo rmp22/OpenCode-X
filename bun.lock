@@ -288,9 +288,6 @@
     "packages/core": {
       "name": "@opencode-ai/core",
       "version": "1.18.14",
-      "bin": {
-        "opencode": "./bin/opencode",
-      },
       "dependencies": {
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/amazon-bedrock": "4.0.112",
@@ -561,7 +558,7 @@
       "name": "opencode",
       "version": "1.18.14",
       "bin": {
-        "opencode": "./bin/opencode",
+        "ocx": "./bin/ocx",
       },
       "dependencies": {
         "@actions/core": "1.11.1",

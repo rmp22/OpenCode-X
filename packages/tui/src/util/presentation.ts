@@ -1,6 +1,6 @@
 const logo = {
   left: ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"],
-  right: ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"],
+  right: ["              ▄              ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█ ____ █__█", "█___ █__█ █__█ █^^^ ▀▀▀▀ _██_", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ____ █__█"],
 }
 
 const reset = "\x1b[0m"
@@ -32,7 +32,7 @@ export function sessionEpilogue(input: { title: string; sessionID?: string }) {
     ...wordmark("  "),
     "",
     `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}opencode -s ${input.sessionID}${reset}`,
+    `  ${weak("Continue")}${bold}ocx -s ${input.sessionID}${reset}`,
     "",
   ].join("\n")
 }

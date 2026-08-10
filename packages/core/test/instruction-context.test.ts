@@ -29,7 +29,7 @@ const instructionLayer = (input: {
   ])
 
 describe("InstructionContext", () => {
-  it.live("loads global and upward project AGENTS.md files as one aggregate context", () =>
+  it.live("loads global and upward project OCX instruction files as one aggregate context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -39,13 +39,16 @@ describe("InstructionContext", () => {
           const global = path.join(tmp.path, "global")
           const project = path.join(tmp.path, "project")
           const directory = path.join(project, "packages", "core")
-          const outside = path.join(tmp.path, "AGENTS.md")
+          const outside = path.join(tmp.path, ".ocx", "AGENTS.md")
           const globalFile = path.join(global, "AGENTS.md")
-          const projectFile = path.join(project, "AGENTS.md")
-          const packageFile = path.join(directory, "AGENTS.md")
+          const projectFile = path.join(project, ".ocx", "AGENTS.md")
+          const packageFile = path.join(directory, ".ocx", "AGENTS.md")
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.dirname(outside), { recursive: true })
+            await fs.mkdir(path.dirname(projectFile), { recursive: true })
+            await fs.mkdir(path.dirname(packageFile), { recursive: true })
             await fs.writeFile(outside, "outside")
             await fs.writeFile(globalFile, "global")
             await fs.writeFile(projectFile, "project")
@@ -109,14 +112,15 @@ describe("InstructionContext", () => {
     ),
   )
 
-  it.live("keeps an empty AGENTS.md as available context", () =>
+  it.live("keeps an empty OCX instruction file as available context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const file = path.join(tmp.path, "AGENTS.md")
+          const file = path.join(tmp.path, ".ocx", "AGENTS.md")
+          yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
           yield* Effect.promise(() => fs.writeFile(file, ""))
           const context = yield* SystemContextRegistry.Service.pipe(
             Effect.flatMap((service) => service.load()),
@@ -164,7 +168,7 @@ describe("InstructionContext", () => {
       expect(
         yield* SystemContext.reconcile(context, {
           "core/instructions": {
-            value: [{ path: "/repo/AGENTS.md", content: "old" }],
+            value: [{ path: "/repo/.ocx/AGENTS.md", content: "old" }],
             removed: "Previously loaded instructions no longer apply.",
           },
         }),
@@ -174,7 +178,7 @@ describe("InstructionContext", () => {
 
   it.effect("preserves admitted instructions when a discovered file disappears before read", () =>
     Effect.gen(function* () {
-      const file = AbsolutePath.make("/repo/AGENTS.md")
+      const file = AbsolutePath.make("/repo/.ocx/AGENTS.md")
       const racingFS = Layer.effect(
         FSUtil.Service,
         FSUtil.Service.pipe(
@@ -248,7 +252,7 @@ describe("InstructionContext", () => {
       )
 
       expect(observed).toEqual({
-        targets: ["AGENTS.md"],
+        targets: [path.join(".ocx", "AGENTS.md")],
         start: FSUtil.resolve("/repo"),
         stop: FSUtil.resolve("/repo"),
       })

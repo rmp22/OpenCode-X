@@ -1,14 +1,14 @@
 ---
-description: Extract non-obvious learnings from session to AGENTS.md files to build codebase understanding
+description: Extract non-obvious learnings from session to .ocx/AGENTS.md files to build codebase understanding
 ---
 
-Analyze this session and extract non-obvious learnings to add to AGENTS.md files.
+Analyze this session and extract non-obvious learnings to add to `.ocx/AGENTS.md` files.
 
-AGENTS.md files can exist at any directory level, not just the project root. When an agent reads a file, any AGENTS.md in parent directories are automatically loaded into the context of the tool read. Place learnings as close to the relevant code as possible:
+`.ocx/AGENTS.md` files can exist at any directory level, not just the project root. Place learnings as close to the relevant code as possible:
 
-- Project-wide learnings → root AGENTS.md
-- Package/module-specific → packages/foo/AGENTS.md
-- Feature-specific → src/auth/AGENTS.md
+- Project-wide learnings → `.ocx/AGENTS.md`
+- Package/module-specific → `packages/foo/.ocx/AGENTS.md`
+- Feature-specific → `src/auth/.ocx/AGENTS.md`
 
 What counts as a learning (non-obvious discoveries only):
 

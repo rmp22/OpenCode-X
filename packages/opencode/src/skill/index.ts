@@ -18,10 +18,7 @@ import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
 
-const CLAUDE_EXTERNAL_DIR = ".claude"
-const AGENTS_EXTERNAL_DIR = ".agents"
-const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
-const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
+const OCX_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
 // Built-in skill that ships with opencode. The model's intuition for what an
@@ -31,7 +28,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 // actual schemas instead of guesses.
 const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
 const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
-  "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+  "Use ONLY when the user is editing or creating OCX configuration: opencode.json, opencode.jsonc, files under .ocx/, or files under ~/.config/ocx/. Also use when creating or fixing OCX agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring OCX itself."
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
 export const Info = Schema.Struct({
@@ -176,53 +173,33 @@ const discoverSkills = Effect.fnUntraced(function* (
   fsys: FSUtil.Interface,
   global: Global.Interface,
   disableExternalSkills: boolean,
-  disableClaudeCodeSkills: boolean,
   directory: string,
-  worktree: string,
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
 
-  const externalDirs: string[] = []
-  if (!disableExternalSkills) {
-    if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
-    externalDirs.push(AGENTS_EXTERNAL_DIR)
-
-    for (const dir of externalDirs) {
-      const root = path.join(global.home, dir)
-      if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
-    }
-
-    const upDirs = yield* fsys
-      .up({ targets: externalDirs, start: directory, stop: worktree })
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-
-    for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
-    }
-  }
-
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OCX_SKILL_PATTERN)
   }
 
-  const cfg = yield* config.get()
-  for (const item of cfg.skills?.paths ?? []) {
-    const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
-    const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
-    if (!(yield* fsys.isDir(dir))) {
-      yield* Effect.logWarning("skill path not found", { path: dir })
-      continue
+  if (!disableExternalSkills) {
+    const cfg = yield* config.get()
+    for (const item of cfg.skills?.paths ?? []) {
+      const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
+      const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+      if (!(yield* fsys.isDir(dir))) {
+        yield* Effect.logWarning("skill path not found", { path: dir })
+        continue
+      }
+
+      yield* scan(state, dir, SKILL_PATTERN)
     }
 
-    yield* scan(state, dir, SKILL_PATTERN)
-  }
-
-  for (const url of cfg.skills?.urls ?? []) {
-    const pulledDirs = yield* discovery.pull(url)
-    for (const dir of pulledDirs) {
-      yield* scan(state, dir, SKILL_PATTERN)
+    for (const url of cfg.skills?.urls ?? []) {
+      const pulledDirs = yield* discovery.pull(url)
+      for (const dir of pulledDirs) {
+        yield* scan(state, dir, SKILL_PATTERN)
+      }
     }
   }
 
@@ -264,9 +241,7 @@ const layer = Layer.effect(
           fsys,
           global,
           flags.disableExternalSkills,
-          flags.disableClaudeCodeSkills,
           ctx.directory,
-          ctx.worktree,
         )
       }),
     )

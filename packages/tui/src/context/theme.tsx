@@ -36,9 +36,9 @@ export type ThemeSource = Readonly<{
 
 const themeSource: ThemeSource = {
   async discover() {
-    const directories = [Global.Path.config]
+    const directories = [process.env.OPENCODE_CONFIG_DIR ?? Global.Path.config]
     for (let current = process.cwd(); ; current = path.dirname(current)) {
-      directories.push(path.join(current, ".opencode"))
+      directories.push(path.join(current, ".ocx"))
       if (path.dirname(current) === current) break
     }
     return discoverThemes(directories)

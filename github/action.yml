@@ -52,8 +52,8 @@ runs:
       id: cache
       uses: actions/cache@v4
       with:
-        path: ~/.opencode/bin
-        key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+        path: ~/.ocx/bin
+        key: ocx-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
 
     - name: Install opencode
       if: steps.cache.outputs.cache-hit != 'true'
@@ -62,12 +62,12 @@ runs:
 
     - name: Add opencode to PATH
       shell: bash
-      run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+      run: echo "$HOME/.ocx/bin" >> $GITHUB_PATH
 
     - name: Run opencode
       shell: bash
       id: run_opencode
-      run: opencode github run
+      run: ocx github run
       env:
         MODEL: ${{ inputs.model }}
         AGENT: ${{ inputs.agent }}

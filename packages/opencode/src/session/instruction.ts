@@ -5,8 +5,8 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Config } from "@/config/config"
+import { ConfigPaths } from "@/config/paths"
 import { InstanceState } from "@/effect/instance-state"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
@@ -48,24 +48,17 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const layer: Layer.Layer<
   Service,
   never,
-  FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service
+  FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const cfg = yield* Config.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    const flags = yield* RuntimeFlags.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [
-      path.join(global.config, "AGENTS.md"),
-      ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
-    ]
-    const instructionFiles = [
-      "AGENTS.md",
-      ...(!flags.disableClaudeCodePrompt ? ["CLAUDE.md"] : []),
-      "CONTEXT.md", // deprecated
-    ]
+    const globalDirectories = [global.config]
+    const globalFiles = [path.join(global.config, "AGENTS.md")]
+    const instructionFiles = ["AGENTS.md", path.join(ConfigPaths.PROJECT_DIRECTORY, "AGENTS.md")]
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -83,9 +76,13 @@ const layer: Layer.Layer<
           .globUp(instruction, ctx.directory, ctx.worktree)
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
       }
-      return yield* fs
-        .globUp(instruction, global.config, global.config)
-        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      for (const root of globalDirectories) {
+        const matches = yield* fs
+          .globUp(instruction, root, root)
+          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+        if (matches.length > 0) return matches
+      }
+      return []
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
@@ -125,10 +122,7 @@ const layer: Layer.Layer<
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)
             .pipe(Effect.catch(() => Effect.succeed([])))
-          if (matches.length > 0) {
-            matches.forEach((item) => paths.add(path.resolve(item)))
-            break
-          }
+          if (matches.length > 0) paths.add(path.resolve(matches[0]))
         }
       }
 
@@ -184,6 +178,7 @@ const layer: Layer.Layer<
       const sys = yield* systemPaths()
       const already = extract(messages)
       const results: { filepath: string; content: string }[] = []
+      if (Flag.OPENCODE_DISABLE_PROJECT_CONFIG) return results
       const s = yield* InstanceState.get(state)
       const root = path.resolve(yield* InstanceState.directory)
 
@@ -231,7 +226,7 @@ export function loaded(messages: SessionV1.WithParts[]) {
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient],
+  deps: [Config.node, FSUtil.node, Global.node, httpClient],
 })
 
 export * as Instruction from "./instruction"

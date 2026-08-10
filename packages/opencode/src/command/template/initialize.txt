@@ -1,6 +1,6 @@
-Create or update `AGENTS.md` for this repository.
+Create or update `.ocx/AGENTS.md` for this repository.
 
-The goal is a compact instruction file that helps future OpenCode sessions avoid mistakes and ramp up quickly. Every line should answer: "Would an agent likely miss this without help?" If not, leave it out.
+The goal is a compact OCX instruction file that helps future sessions avoid mistakes and ramp up quickly. Every line should answer: "Would an agent likely miss this without help?" If not, leave it out.
 
 User-provided focus or constraints (honor these):
 $ARGUMENTS
@@ -11,7 +11,7 @@ Read the highest-value sources first:
 - `README*`, root manifests, workspace config, lockfiles
 - build, test, lint, formatter, typecheck, and codegen config
 - CI workflows and pre-commit / task runner config
-- existing instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/`, `.cursorrules`, `.github/copilot-instructions.md`)
+- existing OCX instruction files (`.ocx/AGENTS.md`)
 - repo-local OpenCode config such as `opencode.json`
 
 If architecture is still unclear after reading config and docs, inspect a small number of representative code files to find the real entrypoints, package boundaries, and execution flow. Prefer reading the files that explain how the system is wired together over random leaf files.
@@ -30,7 +30,7 @@ Look for the highest-signal facts for an agent working in this repo:
 - testing quirks: fixtures, integration test prerequisites, snapshot workflows, required services, flaky or expensive suites
 - important constraints from existing instruction files worth preserving
 
-Good `AGENTS.md` content is usually hard-earned context that took reading multiple files to infer.
+Good `.ocx/AGENTS.md` content is usually hard-earned context that took reading multiple files to infer.
 
 ## Questions
 
@@ -63,4 +63,4 @@ When in doubt, omit.
 
 Prefer short sections and bullets. If the repo is simple, keep the file simple. If the repo is large, summarize the few structural facts that actually change how an agent should work.
 
-If `AGENTS.md` already exists at `${path}`, improve it in place rather than rewriting blindly. Preserve verified useful guidance, delete fluff or stale claims, and reconcile it with the current codebase.
+If `.ocx/AGENTS.md` already exists at `${path}`, improve it in place rather than rewriting blindly. Preserve verified useful guidance, delete fluff or stale claims, and reconcile it with the current codebase.

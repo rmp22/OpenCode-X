@@ -39,15 +39,14 @@ already-loaded config until then.
 
 | Scope                         | Path                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.opencode/opencode.json` (opencode walks up from the cwd to the worktree root) |
-| Global config                 | `~/.config/opencode/opencode.json` (NOT `~/.opencode/`)                                                                   |
-| Project agents                | `.opencode/agent/<name>.md` or `.opencode/agents/<name>.md`                                                               |
-| Global agents                 | `~/.config/opencode/agent(s)/<name>.md`                                                                                   |
-| Project commands              | `.opencode/command/<name>.md` or `.opencode/commands/<name>.md`                                                           |
-| Global commands               | `~/.config/opencode/command(s)/<name>.md`                                                                                 |
-| Project skills                | `.opencode/skill(s)/<name>/SKILL.md`                                                                                      |
-| Global skills                 | `~/.config/opencode/skill(s)/<name>/SKILL.md`                                                                             |
-| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
+| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.ocx/opencode.json` (OCX walks up from the cwd to the worktree root) |
+| Global config                 | `~/.config/ocx/opencode.json`                                                                                  |
+| Project agents                | `.ocx/agent/<name>.md` or `.ocx/agents/<name>.md`                                                               |
+| Global agents                 | `~/.config/ocx/agent(s)/<name>.md`                                                                             |
+| Project commands              | `.ocx/command/<name>.md` or `.ocx/commands/<name>.md`                                                           |
+| Global commands               | `~/.config/ocx/command(s)/<name>.md`                                                                           |
+| Project skills                | `.ocx/skill(s)/<name>/SKILL.md`                                                                                |
+| Global skills                 | `~/.config/ocx/skill(s)/<name>/SKILL.md`                                                                       |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
 top-level keys in `opencode.json` are rejected with `ConfigInvalidError`.
@@ -68,10 +67,10 @@ Every field is optional.
   "share": "manual" | "auto" | "disabled",
   "autoupdate": true | false | "notify",
   "snapshot": true,
-  "instructions": ["AGENTS.md", "docs/style.md"],
+  "instructions": [".ocx/AGENTS.md", "docs/style.md"],
 
   "skills": {
-    "paths": [".opencode/skills", "/abs/path/to/skills"],
+    "paths": [".ocx/skills", "/abs/path/to/skills"],
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
@@ -165,7 +164,7 @@ file is named `SKILL.md` exactly, and lives in its own folder named after the
 skill:
 
 ```
-.opencode/skills/my-skill/SKILL.md
+.ocx/skills/my-skill/SKILL.md
 ```
 
 Frontmatter:
@@ -244,7 +243,7 @@ Two ways to define an agent. Use the file form for anything non-trivial.
 ### File
 
 ```
-.opencode/agent/my-reviewer.md      OR     .opencode/agents/my-reviewer.md
+.ocx/agent/my-reviewer.md      OR     .ocx/agents/my-reviewer.md
 ```
 
 ```markdown
@@ -286,7 +285,7 @@ opencode's command loader scans for `**/*.md` inside command directories. The
 file is named after the command, and lives directly inside the `command` folder:
 
 ```
-.opencode/command/deploy.md
+.ocx/command/deploy.md
 ```
 
 Frontmatter:
@@ -320,7 +319,7 @@ model: anthropic/claude-sonnet-4-6
 ```
 
 Auto-discovered plugins (no config entry needed): any `*.ts` or `*.js` file in
-`.opencode/plugin/` or `.opencode/plugins/`.
+`.ocx/plugin/` or `.ocx/plugins/`.
 
 A plugin module exports `default` (or any named export) of type
 `Plugin = (input: PluginInput, options?) => Promise<Hooks>`. The export is a
@@ -434,9 +433,7 @@ When a user's config is broken and opencode won't start, these env vars help:
   inject inline JSON as a final local-scope merge.
 - `OPENCODE_DISABLE_DEFAULT_PLUGINS=1`: skip default plugins.
 - `OPENCODE_PURE=1`: skip external plugins entirely.
-- `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`,
-  `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`: skip the external skill scans under
-  `~/.claude/` and `~/.agents/`.
+- `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`: skip configured external skill paths and URLs.
 
 ## When proposing edits
 

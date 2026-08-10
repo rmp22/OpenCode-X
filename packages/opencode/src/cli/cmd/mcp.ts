@@ -12,11 +12,11 @@ import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
+import { ConfigPaths } from "@/config/paths"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
@@ -396,7 +396,10 @@ async function resolveConfigPath(baseDir: string, global = false) {
   const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
+    candidates.push(
+      path.join(baseDir, ConfigPaths.PROJECT_DIRECTORY, "opencode.json"),
+      path.join(baseDir, ConfigPaths.PROJECT_DIRECTORY, "opencode.jsonc"),
+    )
   }
 
   for (const candidate of candidates) {
@@ -494,7 +497,7 @@ export const McpAddCommand = effectCmd({
               ...(Object.keys(environment).length ? { environment } : {}),
             }
 
-        const configPath = await resolveConfigPath(Global.Path.config, true)
+        const configPath = await resolveConfigPath(ConfigPaths.globalDirectory(), true)
         await addMcpToConfig(args.name, mcpConfig, configPath)
         prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
         return
@@ -508,7 +511,7 @@ export const McpAddCommand = effectCmd({
       // Resolve config paths eagerly for hints
       const [projectConfigPath, globalConfigPath] = await Promise.all([
         resolveConfigPath(ctx.worktree),
-        resolveConfigPath(Global.Path.config, true),
+        resolveConfigPath(ConfigPaths.globalDirectory(), true),
       ])
 
       // Determine scope
