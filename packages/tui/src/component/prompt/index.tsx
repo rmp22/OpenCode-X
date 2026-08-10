@@ -264,8 +264,16 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return
     const session = sync.session.get(props.sessionID)
     const msg = sync.data.message[props.sessionID] ?? []
+    const toolCalls = msg.reduce(
+      (count, item) =>
+        count + (item.role === "assistant" ? (sync.data.part[item.id] ?? []).filter((part) => part.type === "tool").length : 0),
+      0,
+    )
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-    if (!last) return
+    if (!last) {
+      if (toolCalls === 0) return
+      return { toolCalls: `${Locale.number(toolCalls)} tool calls` }
+    }
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
@@ -277,6 +285,7 @@ export function Prompt(props: PromptProps) {
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
+      toolCalls: toolCalls > 0 ? `${Locale.number(toolCalls)} tool calls` : undefined,
     }
   })
 
@@ -1662,7 +1671,7 @@ export function Prompt(props: PromptProps) {
                     <Match when={usage()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          {[item().context, item().toolCalls, item().cost].filter(Boolean).join(" · ")}
                         </text>
                       )}
                     </Match>
