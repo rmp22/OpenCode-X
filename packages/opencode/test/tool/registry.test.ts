@@ -109,6 +109,26 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("exposes youtube-transcript", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("youtube-transcript")
+    }),
+  )
+
+  it.instance("exposes structure and audit", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("structure")
+      expect(ids).toContain("audit")
+      expect(ids).toContain("design")
+    }),
+  )
+
   it.instance("does not expose execute unless code mode is enabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

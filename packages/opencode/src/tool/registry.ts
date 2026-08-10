@@ -16,6 +16,11 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { StrategyTool } from "./strategy"
+import { StructureTool } from "./structure"
+import { AuditTool } from "./audit"
+import { DesignTool } from "./design"
+import { YoutubeTranscriptTool } from "./youtube-transcript"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -55,8 +60,8 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 
-export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
+export function webSearchEnabled(_providerID: ProviderV2.ID, _flags = { exa: false, parallel: false }) {
+  return true
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
@@ -109,6 +114,11 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const strategytool = yield* StrategyTool
+    const structuretool = yield* StructureTool
+    const audittool = yield* AuditTool
+    const designtool = yield* DesignTool
+    const youtubeTranscript = yield* YoutubeTranscriptTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -214,6 +224,11 @@ const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          strategy: Tool.init(strategytool),
+          structure: Tool.init(structuretool),
+          audit: Tool.init(audittool),
+          design: Tool.init(designtool),
+          youtubeTranscript: Tool.init(youtubeTranscript),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -237,6 +252,11 @@ const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.strategy,
+            tool.structure,
+            tool.audit,
+            tool.design,
+            tool.youtubeTranscript,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),

@@ -1749,6 +1749,18 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={display() === "websearch"}>
           <WebSearch {...toolprops} />
         </Match>
+        <Match when={display() === "strategy"}>
+          <StrategyTool {...toolprops} />
+        </Match>
+        <Match when={display() === "structure"}>
+          <StructureTool {...toolprops} />
+        </Match>
+        <Match when={display() === "audit"}>
+          <AuditTool {...toolprops} />
+        </Match>
+        <Match when={display() === "design"}>
+          <DesignTool {...toolprops} />
+        </Match>
         <Match when={display() === "write"}>
           <Write {...toolprops} />
         </Match>
@@ -2210,6 +2222,60 @@ function WebSearch(props: ToolProps) {
   )
 }
 
+function StrategyTool(props: ToolProps) {
+  const names = createMemo(() => formatStrategyNames(props.input))
+  return (
+    <InlineTool
+      icon="⚙"
+      pending="Loading strategies..."
+      failure="Strategy loading failed"
+      complete={names()}
+      part={props.part}
+    >
+      Strategy{names() ? ` ${names()}` : ""}
+    </InlineTool>
+  )
+}
+
+function StructureTool(props: ToolProps) {
+  const label = createMemo(() => formatStructureLabel(props.input))
+  return (
+    <InlineTool
+      icon="▤"
+      pending="Recording structure..."
+      failure="Structure recording failed"
+      complete={true}
+      part={props.part}
+    >
+      {label()}
+    </InlineTool>
+  )
+}
+
+function AuditTool(props: ToolProps) {
+  const label = createMemo(() => formatAuditLabel(props.input))
+  return (
+    <InlineTool icon="✓" pending="Auditing artifact..." failure="Audit failed" complete={true} part={props.part}>
+      {label()}
+    </InlineTool>
+  )
+}
+
+function DesignTool(props: ToolProps) {
+  const label = createMemo(() => formatDesignLabel(props.input))
+  return (
+    <InlineTool
+      icon="✦"
+      pending="Recording design direction..."
+      failure="Design direction failed"
+      complete={true}
+      part={props.part}
+    >
+      {label()}
+    </InlineTool>
+  )
+}
+
 function Task(props: ToolProps) {
   const { theme } = useTheme()
   const { navigate } = useRoute()
@@ -2634,6 +2700,10 @@ const toolDisplays = new Set([
   "grep",
   "webfetch",
   "websearch",
+  "strategy",
+  "structure",
+  "audit",
+  "design",
   "write",
   "edit",
   "task",
@@ -2646,6 +2716,32 @@ const toolDisplays = new Set([
 
 export function toolDisplay(tool: string) {
   return toolDisplays.has(tool) ? tool : "generic"
+}
+
+export function formatStrategyNames(input: Record<string, unknown>) {
+  const name = stringValue(input.name)
+  const names = Array.isArray(input.names)
+    ? input.names.filter((name): name is string => typeof name === "string")
+    : name
+      ? [name]
+      : []
+  return [...new Set(names)].join(", ")
+}
+
+export function formatStructureLabel(input: Record<string, unknown>) {
+  const count = Array.isArray(input.files) ? input.files.length : 0
+  return `Structure${count ? ` ${count} file${count === 1 ? "" : "s"}` : ""}`
+}
+
+export function formatAuditLabel(input: Record<string, unknown>) {
+  const artifact = stringValue(input.artifact)
+  const axes = Array.isArray(input.axes) ? input.axes.filter((axis): axis is string => typeof axis === "string") : []
+  return `Audit${artifact ? ` ${artifact}` : ""}${axes.length ? ` (${axes.join(", ")})` : ""}`
+}
+
+export function formatDesignLabel(input: Record<string, unknown>) {
+  const direction = stringValue(input.direction)
+  return `Design${direction ? ` ${direction}` : ""}`
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {

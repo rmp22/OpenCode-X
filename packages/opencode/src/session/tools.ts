@@ -23,6 +23,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { PhaseGuard } from "@/tool/phase-guard"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -103,6 +104,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
+            const gate = PhaseGuard.toolGate(ctx.sessionID, item.id, args)
+            if (gate) yield* Effect.fail(new Error(gate))
+            PhaseGuard.recordToolCall(ctx.sessionID, item.id, args)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -123,6 +127,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
               output,
             )
+            PhaseGuard.recordToolResult(ctx.sessionID, item.id, args, result.metadata)
             if (options.abortSignal?.aborted) {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }
@@ -157,6 +162,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
             const ctx = context(toRecord(args), opts)
+            PhaseGuard.recordToolCall(ctx.sessionID, MCP_RESOURCE_TOOLS.list, toRecord(args))
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -240,6 +246,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
             const ctx = context(toRecord(args), opts)
+            PhaseGuard.recordToolCall(ctx.sessionID, MCP_RESOURCE_TOOLS.listTemplates, toRecord(args))
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -327,6 +334,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const parsed = parseReadMcpResourceArgs(args)
             const ctx = context(toRecord(args), opts)
+            PhaseGuard.recordToolCall(ctx.sessionID, MCP_RESOURCE_TOOLS.read, toRecord(args))
             const clients = yield* mcp.clients()
             const client = clients[parsed.server]
             if (!client) {
@@ -399,6 +407,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
+          PhaseGuard.recordToolCall(ctx.sessionID, key, toRecord(args))
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },

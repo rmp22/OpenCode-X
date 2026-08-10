@@ -32,6 +32,7 @@ import type { TaskTool } from "@/tool/task"
 import type { TodoWriteTool } from "@/tool/todo"
 import type { WebFetchTool } from "@/tool/webfetch"
 import { webSearchProviderLabel, type WebSearchTool } from "@/tool/websearch"
+import type { YoutubeTranscriptTool } from "@/tool/youtube-transcript"
 import type { WriteTool } from "@/tool/write"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import * as Locale from "@/util/locale"
@@ -108,6 +109,7 @@ type ToolDefs = {
   lsp: typeof LspTool
   webfetch: typeof WebFetchTool
   websearch: typeof WebSearchTool
+  "youtube-transcript": typeof YoutubeTranscriptTool
   skill: typeof SkillTool
   plan_exit: typeof PlanExitTool
 }
@@ -343,6 +345,14 @@ function runWebfetch(p: ToolProps<typeof WebFetchTool>): ToolInline {
   return {
     icon: "%",
     title: url ? `WebFetch ${url}` : "WebFetch",
+  }
+}
+
+function runYoutubeTranscript(p: ToolProps<typeof YoutubeTranscriptTool>): ToolInline {
+  const url = p.input.url ?? ""
+  return {
+    icon: "%",
+    title: url ? `YouTube transcript ${url}` : "YouTube transcript",
   }
 }
 
@@ -907,6 +917,11 @@ function scrollWebfetchStart(p: ToolProps<typeof WebFetchTool>): string {
   return `% WebFetch ${url}`
 }
 
+function scrollYoutubeTranscriptStart(p: ToolProps<typeof YoutubeTranscriptTool>): string {
+  const url = p.input.url ?? ""
+  return url ? `% YouTube transcript ${url}` : "% YouTube transcript"
+}
+
 function scrollWebSearchStart(p: ToolProps<typeof WebSearchTool>): string {
   const title = webSearchProviderLabel(p.metadata.provider)
   const query = p.input.query ?? ""
@@ -990,6 +1005,15 @@ function permWebfetch(p: ToolPermissionProps<typeof WebFetchTool>): ToolPermissi
     icon: "%",
     title: `WebFetch ${url}`,
     lines: url ? [`URL: ${url}`] : [],
+  }
+}
+
+function permYoutubeTranscript(p: ToolPermissionProps<typeof YoutubeTranscriptTool>): ToolPermissionInfo {
+  const url = p.input.url || ""
+  return {
+    icon: "%",
+    title: `YouTube transcript ${url}`,
+    lines: url ? [`URL: ${url}`, `Language: ${p.input.language || "en"}`] : [],
   }
 }
 
@@ -1208,6 +1232,17 @@ const TOOL_RULES = {
       start: scrollWebSearchStart,
     },
     permission: permWebSearch,
+  },
+  "youtube-transcript": {
+    view: {
+      output: false,
+      final: false,
+    },
+    run: runYoutubeTranscript,
+    scroll: {
+      start: scrollYoutubeTranscriptStart,
+    },
+    permission: permYoutubeTranscript,
   },
   skill: {
     view: {

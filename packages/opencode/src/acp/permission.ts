@@ -143,6 +143,7 @@ function permissionTitle(toolName: string, input: ToolInput) {
       return stringValue(input.description) ?? stringValue(input.command) ?? stringValue(input.parentDir)
 
     case "webfetch":
+    case "youtube-transcript":
       return stringValue(input.url)
 
     case "websearch":

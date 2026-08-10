@@ -14,6 +14,10 @@ import {
   parseQuestions,
   parseTodos,
   alwaysSeparate,
+  formatAuditLabel,
+  formatDesignLabel,
+  formatStructureLabel,
+  formatStrategyNames,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -225,7 +229,25 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("bash")).toBe("bash")
+    expect(toolDisplay("strategy")).toBe("strategy")
+    expect(toolDisplay("structure")).toBe("structure")
+    expect(toolDisplay("audit")).toBe("audit")
+    expect(toolDisplay("design")).toBe("design")
     expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("shows batched strategy names", () => {
+    expect(formatStrategyNames({ names: ["web", "ui", "strategy"] })).toBe("web, ui, strategy")
+    expect(formatStrategyNames({ name: "browser" })).toBe("browser")
+    expect(formatStrategyNames({ names: ["web", 1, null, "web"] })).toBe("web")
+  })
+
+  test("shows structure and audit calls", () => {
+    expect(formatStructureLabel({ files: [{ path: "index.html" }, { path: "styles.css" }] })).toBe("Structure 2 files")
+    expect(formatAuditLabel({ artifact: "landing page", axes: ["structure", "responsive"] })).toBe(
+      "Audit landing page (structure, responsive)",
+    )
+    expect(formatDesignLabel({ direction: "field index" })).toBe("Design field index")
   })
 
   test("replaces pending copy when a tool fails before completion", async () => {
