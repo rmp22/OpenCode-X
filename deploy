@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+cd "$(dirname "$0")"
+
+SRC="packages/opencode/dist/opencode-linux-x64/bin/ocx"
+DST="$HOME/.ocx/bin/ocx"
+BACKUP="$HOME/.ocx/bin/ocx.backup"
+
+if [ ! -f "$SRC" ]; then
+  echo "Error: No built binary found at $SRC"
+  echo "Run ./build first"
+  exit 1
+fi
+
+mkdir -p "$(dirname "$DST")"
+fuser -k "$DST" 2>/dev/null || true
+pkill -f "ocx serve" 2>/dev/null || true
+sleep 1
+cp "$DST" "$BACKUP" 2>/dev/null || true
+cp "$SRC" "$DST"
+chmod +x "$DST"
+VERSION=$("$DST" --version 2>/dev/null)
+echo "Deployed ocx $VERSION"
