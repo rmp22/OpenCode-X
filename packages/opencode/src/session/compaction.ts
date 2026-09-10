@@ -22,11 +22,14 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
+import { Progress } from "@/ocx/progress"
+import { TailBudget } from "@/ocx/compaction/tail-budget"
 
 export const Event = SessionCompactionEvent
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
+export const PRESERVE_RECENT_MESSAGES = 50
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
@@ -189,10 +192,16 @@ const layer = Layer.effect(
       messages: SessionV1.WithParts[]
       cfg: ConfigV1.Info
       model: Provider.Model
+      budgetCeiling: number
+      tailFloorID?: MessageID
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
       if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
-      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      const preserve = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      const budget = Math.min(preserve, input.budgetCeiling)
+      if (budget < preserve) {
+        yield* Effect.logInfo("tail budget clamped to fit the assembled context", { preserve, budget })
+      }
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = all.slice(-limit)
@@ -210,6 +219,7 @@ const layer = Layer.effect(
       let keep: Tail | undefined
       for (let i = recent.length - 1; i >= 0; i--) {
         const turn = recent[i]!
+        if (input.tailFloorID && turn.id < input.tailFloorID) break
         const size = sizes[i]
         if (total + size <= budget) {
           total += size
@@ -254,8 +264,10 @@ const layer = Layer.effect(
       let pruned = 0
       const toPrune: SessionV1.ToolPart[] = []
       let turns = 0
+      const recentMessageStart = Math.max(0, msgs.length - PRESERVE_RECENT_MESSAGES)
 
       loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
+        if (msgIndex >= recentMessageStart) continue
         const msg = msgs[msgIndex]
         if (msg.info.role === "user") turns++
         if (turns < 2) continue
@@ -326,18 +338,42 @@ const layer = Layer.effect(
       }
 
       const agent = yield* agents.get("compaction")
+      const sessionModel = yield* provider
+        .getModel(userMessage.model.providerID, userMessage.model.modelID)
+        .pipe(Effect.orDie)
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
-        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
+        : sessionModel
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
-      const previousSummary = prior.at(-1)?.summary
+      const latestPair = prior.reduce<CompletedCompaction | undefined>(
+        (latest, item) =>
+          !latest || history[item.assistantIndex]!.info.id > history[latest.assistantIndex]!.info.id ? item : latest,
+        undefined,
+      )
+      const previousSummary = latestPair?.summary
+      const olderBoundary =
+        latestPair && prior.length > 1
+          ? prior
+              .filter((item) => item !== latestPair)
+              .reduce((newest, item) =>
+                history[item.userIndex]!.info.id > history[newest.userIndex]!.info.id ? item : newest,
+              )
+          : undefined
+      const tailFloorID = olderBoundary ? history[olderBoundary.userIndex]!.info.id : undefined
       const selected = yield* select({
         messages: history.filter((_, index) => !hidden.has(index)),
         cfg,
         model,
+        budgetCeiling: TailBudget.tailBudget({
+          cfg,
+          model: sessionModel,
+          digestModel: model,
+          outputTokenMax: flags.outputTokenMax,
+        }),
+        tailFloorID,
       })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
@@ -345,7 +381,10 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      const progressContext = yield* Progress.compactionContext(input.sessionID)
+      const nextPrompt = compacting.prompt
+        ? [compacting.prompt, progressContext].join("\n\n")
+        : buildPrompt({ previousSummary, context: [...compacting.context, progressContext] })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
@@ -482,7 +521,7 @@ const layer = Layer.effect(
               (input.overflow
                 ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
                 : "") +
-              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+                "Read structured OCX task memory first. Resume its NEXT ACTION. Continue the current work and do not restart completed work; resolve only the concrete OPEN BLOCKER.\n\nContinue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: continueMsg.id,

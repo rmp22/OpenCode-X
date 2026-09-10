@@ -45,6 +45,8 @@ it.instance("subagent permissions take precedence over parent agent restrictions
       subagent: generalAgent!,
     })
 
+    expect(subagentSessionPermission).toContainEqual({ permission: "bash", pattern: "*", action: "allow" })
+
     // Mirror the runtime evaluation in session/prompt.ts (~line 410, 639):
     //   ruleset: Permission.merge(agent.permission, session.permission ?? [])
     const effective = Permission.merge(generalAgent!.permission, subagentSessionPermission)
@@ -155,6 +157,60 @@ it.effect("subagent inherits parent session deny rules as hard runtime ceilings"
       }),
     )
 
+    expect(Permission.evaluate("bash", "git log --oneline", effective).action).toBe("deny")
     expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
+  }),
+)
+
+it.instance(
+  "global Bash deny remains effective for subagents",
+  () =>
+    Effect.gen(function* () {
+      const general = yield* Agent.use.get("general")
+      expect(general).toBeDefined()
+
+      const effective = Permission.merge(
+        general!.permission,
+        deriveSubagentSessionPermission({
+          parentSessionPermission: [],
+          subagent: general!,
+        }),
+      )
+
+      expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
+    }),
+  {
+    config: {
+      permission: {
+        bash: "deny",
+      },
+    },
+  },
+)
+
+it.effect("command-specific Bash deny remains effective", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        "*": "deny",
+        bash: {
+          "*": "allow",
+          "git log*": "deny",
+        },
+      },
+    })
+    const effective = Permission.merge(
+      executor.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [],
+        subagent: executor,
+      }),
+    )
+
+    expect(Permission.evaluate("bash", "git status", effective).action).toBe("allow")
+    expect(Permission.evaluate("bash", "git log --oneline", effective).action).toBe("deny")
+    expect(Permission.evaluate("edit", "src/file.ts", effective).action).toBe("deny")
   }),
 )

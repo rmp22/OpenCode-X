@@ -79,6 +79,77 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  it.effect("parses Batch A switches and the opt-in strong reviewer model", () =>
+    Effect.gen(function* () {
+      const configured = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+            OPENCODE_STRONG_REVIEWER: " openai/gpt-5 ",
+          }),
+        ),
+      )
+      expect(configured.ocxReviewEnvelope).toBe(true)
+      expect(configured.ocxFlakeGate).toBe(true)
+      expect(configured.ocxAdrStore).toBe(true)
+      expect(configured.ocxStrongReviewer).toBe("openai/gpt-5")
+
+      const testDefaults = yield* readFlags.pipe(Effect.provide(RuntimeFlags.layer()))
+      expect(testDefaults.ocxReviewEnvelope).toBe(true)
+      expect(testDefaults.ocxFlakeGate).toBe(true)
+      expect(testDefaults.ocxAdrStore).toBe(true)
+      expect(testDefaults.ocxStrongReviewer).toBeUndefined()
+      expect(testDefaults.ocxWorkGraph).toBe(true)
+    }),
+  )
+
+  it.effect("keeps the work graph runtime enabled", () =>
+    Effect.gen(function* () {
+      const configured = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+            OPENCODE_OCX_WORK_GRAPH: "false",
+          }),
+        ),
+      )
+      expect(configured.ocxWorkGraph).toBe(true)
+      const defaults = yield* readFlags.pipe(Effect.provide(RuntimeFlags.layer()))
+       expect(defaults.ocxWorkGraph).toBe(true)
+    }),
+  )
+
+  it.effect("exposes no reply style mode flag", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(RuntimeFlags.layer()))
+      expect("ocxStyleMode" in flags).toBe(false)
+    }),
+  )
+
+  it.effect("keeps Batch B and C OCX features enabled", () =>
+    Effect.gen(function* () {
+      const configured = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+          }),
+        ),
+      )
+      expect(configured.ocxPractices).toBe(true)
+      expect(configured.ocxPatchSelection).toBe(true)
+
+      const disabled = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+          }),
+        ),
+      )
+      expect(disabled.ocxPractices).toBe(true)
+      expect(disabled.ocxPatchSelection).toBe(true)
+
+      const testDefaults = yield* readFlags.pipe(Effect.provide(RuntimeFlags.layer()))
+      expect(testDefaults.ocxPractices).toBe(true)
+      expect(testDefaults.ocxPatchSelection).toBe(true)
+    }),
+  )
+
   it.effect("enables native LLM via dedicated flag only", () =>
     Effect.gen(function* () {
       const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true" })))

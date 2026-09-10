@@ -6,3 +6,5 @@ Usage:
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
+- NEVER add explanatory code comments (such as `// explain code`, `/* ... */`, `# comments`) to the written code unless explicitly requested by the user. Code must read cleanly by itself without added comments. Only keep required compiler pragmas, copyright/license headers, and directive annotations.
+- NEVER use inline fully qualified names (such as `java.util.List`, `android.util.Log`, `org.springframework.http.ResponseEntity`) in Java, Kotlin, etc. Add the proper import statement at the top of the file and use the simple name. If disambiguating a collision, prefer an import alias if supported (e.g. in Kotlin); inline FQNs are only permitted as an unavoidable last resort in Java when collisions cannot be aliased.

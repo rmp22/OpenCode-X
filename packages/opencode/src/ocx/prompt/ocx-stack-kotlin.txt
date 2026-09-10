@@ -1,0 +1,14 @@
+=== KOTLIN ADAPTER ===
+
+- Follow the project Kotlin version, build tool, coroutine model, and nullability rules.
+- No `!!`, FQNs, or `*Util`/`*Helper` names. Use `?: return` or `?.let`.
+- In AOSP or Android platform code, follow the checked-in Android.bp or Gradle structure and the repository's Kotlin style.
+- Keep platform APIs behind the correct module or source set. Do not place Android-only dependencies in shared code.
+- Use a data class for immutable value objects, request or response data, and UI state. Use a regular class when identity, lifecycle, or invariants matter.
+- Use sealed interfaces or classes for a closed state or event model. Do not encode the same state with unrelated nullable fields and booleans.
+- Use sealed types for finite states and keep nullable values at real boundaries.
+- Make coroutine scope and cancellation ownership explicit. Do not launch work in a global scope.
+- Preserve structured concurrency, lifecycle cleanup, and dispatcher choices.
+- Validate external input before mapping it into domain types.
+- Use the existing error model and avoid broad catches that turn failures into empty results.
+- Test loading, empty, error, cancellation, and lifecycle states.

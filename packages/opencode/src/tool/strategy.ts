@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Tool } from "./tool"
-import { Strategy } from "@/session/prompt/strategy"
+import { Strategy } from "@/ocx/strategy"
 import DESCRIPTION from "./strategy.txt"
 
 const StrategyName = Schema.Literals(Strategy.STRATEGY_NAMES)

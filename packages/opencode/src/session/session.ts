@@ -37,6 +37,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
+import { OwnerSession } from "@/ocx/owner/session-filter"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
@@ -575,7 +576,8 @@ const layer: Layer.Layer<
         .limit(input?.limit ?? 100)
         .all()
         .pipe(Effect.orDie)
-      const ids = [...new Set(rows.map((row) => row.project_id))]
+      const visible = rows.map(fromRow).filter((info) => !OwnerSession.isInternal(info))
+      const ids = [...new Set(visible.map((info) => info.projectID))]
       const projects = new Map<string, ProjectInfo>()
       if (ids.length > 0) {
         const items = yield* db
@@ -592,7 +594,7 @@ const layer: Layer.Layer<
           })
         }
       }
-      return rows.map((row) => ({ ...fromRow(row), project: projects.get(row.project_id) ?? null }))
+      return visible.map((info) => ({ ...info, project: projects.get(info.projectID) ?? null }))
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -1003,10 +1005,7 @@ function listByProject(
     .orderBy(desc(SessionTable.time_updated))
     .limit(limit)
     .all()
-    .pipe(
-      Effect.orDie,
-      Effect.map((rows) => rows.map(fromRow)),
-    )
+    .pipe(Effect.orDie, Effect.map((rows) => rows.map(fromRow).filter((info) => !OwnerSession.isInternal(info))))
 }
 
 export const node = LayerNode.make({

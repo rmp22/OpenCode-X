@@ -16,8 +16,12 @@ mkdir -p "$(dirname "$DST")"
 fuser -k "$DST" 2>/dev/null || true
 pkill -f "ocx serve" 2>/dev/null || true
 sleep 1
-cp "$DST" "$BACKUP" 2>/dev/null || true
-cp "$SRC" "$DST"
-chmod +x "$DST"
-VERSION=$("$DST" --version 2>/dev/null)
+if [ -f "$DST" ]; then
+  cp -f "$DST" "$BACKUP" 2>/dev/null || true
+fi
+TMP="${DST}.tmp.$$"
+cp "$SRC" "$TMP"
+chmod +x "$TMP"
+mv -f "$TMP" "$DST"
+VERSION=$("$DST" --version)
 echo "Deployed ocx $VERSION"

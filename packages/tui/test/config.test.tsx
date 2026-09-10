@@ -86,6 +86,18 @@ test("resolves a session move keybind", () => {
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
 })
 
+test("binds the permission mode toggle to the leader default", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("permission.mode")).toMatchObject([{ key: "<leader>p" }])
+})
+
+test("resolves a permission mode keybind override", () => {
+  const config = resolve({ keybinds: { permission_mode_toggle: "ctrl+o" } }, { terminalSuspend: true })
+
+  expect(config.keybinds.get("permission.mode")).toMatchObject([{ key: "ctrl+o" }])
+})
+
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {
   const config = resolve({}, { terminalSuspend: false })
 

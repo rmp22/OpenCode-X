@@ -1,0 +1,19 @@
+---
+name: api-adherence
+description: Verify APIs, dependencies, signatures, and module links against the repository before use.
+signals: api, dependency, dependencies, import, package, signature, schema, contract
+globs: **/package.json, **/go.mod, **/Cargo.toml, **/requirements.txt, **/*.ts, **/*.tsx
+sources: https://google.github.io/eng-practices/review/reviewer/standard.html | 2026-08-28
+---
+## Rules
+- Read the manifest and nearby source before importing a package or API.
+- Match the actual signature, error behavior, and lifecycle of the called boundary.
+- Keep public names and schemas stable unless the request explicitly permits a break.
+- Validate unknown input before narrowing it into domain logic.
+- Remove guessed dependencies, wrappers, aliases, and dead references before delivery.
+
+## Example
+Before adding an import, locate the installed package, read its existing call sites, and run the narrowest type or behavior check.
+
+## Sources
+- https://google.github.io/eng-practices/review/reviewer/standard.html (2026-08-28)

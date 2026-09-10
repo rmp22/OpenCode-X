@@ -1,3 +1,0 @@
-Record the implementation structure before changing files.
-
-Use this tool before the first mutation and again when the file tree or ownership changes. Record the operation, goal, scope, allowed changes, allowed breaks, non-goals, acceptance checks, and rollback or migration plan. Provide one file plan entry for every changed or new file. State what each file owns, what it does not own, what it uses, and its public inputs or outputs. State dependency direction, state owner, and preserved contracts. The tool returns a requirements and structure contract that remains visible in the conversation.

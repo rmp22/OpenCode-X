@@ -4,12 +4,14 @@ import { InstanceState } from "@/effect/instance-state"
 import type * as Tool from "./tool"
 import { containsPath } from "../project/instance-context"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { PathConstraint, type PathOperation } from "@/ocx/scope/path-constraint"
 
 type Kind = "file" | "directory"
 
 type Options = {
   bypass?: boolean
   kind?: Kind
+  operation?: PathOperation
 }
 
 export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
@@ -18,11 +20,12 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   options?: Options,
 ) {
   if (!target) return false
-
-  if (options?.bypass) return false
-
   const ins = yield* InstanceState.context
+  if (options?.bypass && PathConstraint.fromMessages(ctx.messages, ins.directory).length === 0) return false
   const full = process.platform === "win32" ? FSUtil.normalizePath(target) : target
+  const decision = PathConstraint.authorize(PathConstraint.fromMessages(ctx.messages, ins.directory), options?.operation ?? "read", full)
+  if (decision && !decision.allowed) return yield* Effect.die(new Error(PathConstraint.renderBlocked(decision)))
+  if (options?.bypass) return false
   if (containsPath(full, ins)) return false
 
   const kind = options?.kind ?? "file"

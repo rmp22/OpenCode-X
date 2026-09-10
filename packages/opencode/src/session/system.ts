@@ -3,10 +3,9 @@ import { Context, Effect, Layer } from "effect"
 
 import { InstanceState } from "@/effect/instance-state"
 
-import PROMPT_ENGLISH from "./prompt/ocx-english.txt"
-import PROMPT_PHASE_RULES from "./prompt/ocx-phase-rules.txt"
-import PROMPT_OPENCODEX from "./prompt/opencodex.txt"
-import { PhaseGuard } from "@/tool/phase-guard"
+import PROMPT_PHASE_RULES from "../ocx/prompt/ocx-phase-rules.txt"
+import PROMPT_OPENCODEX from "../ocx/prompt/opencodex.txt"
+import PROMPT_THINKING from "../ocx/prompt/ocx-thinking.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -17,23 +16,27 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Codebase } from "@/ocx/codebase/service"
 
 type ProviderInput = {
   readonly mode?: Agent.Info["mode"]
   readonly hidden?: boolean
   readonly small?: boolean
+  readonly pipeline?: boolean
 }
 
 type EnvironmentInput = {
   readonly model: Pick<Provider.Model, "api" | "providerID" | "variants">
   readonly variant?: string
+  readonly sessionID?: string
 }
 
-const PROMPTS = [PROMPT_OPENCODEX, PROMPT_ENGLISH, ...PhaseGuard.prompts()]
+const PROMPTS = [PROMPT_OPENCODEX, PROMPT_THINKING]
 
 export function provider(input: ProviderInput = {}): string[] {
   if (input.small || input.hidden) return []
   if (input.mode !== "primary" && input.mode !== "all" && input.mode !== "subagent") return [...PROMPTS]
+  if (input.pipeline) return [...PROMPTS]
   return [...PROMPTS, PROMPT_PHASE_RULES]
 }
 
@@ -69,6 +72,7 @@ const layer = Layer.effect(
     const skill = yield* Skill.Service
     const mcp = yield* MCP.Service
     const locations = yield* LocationServiceMap.Service
+    const codebase = yield* Codebase.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (input: EnvironmentInput) {
@@ -76,6 +80,7 @@ const layer = Layer.effect(
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        const codebaseContext = yield* codebase.context(input.sessionID)
         return [
           [
             modelIdentity(input),
@@ -106,6 +111,7 @@ const layer = Layer.effect(
                   ]),
                 "</available_references>",
               ].join("\n"),
+          codebaseContext,
         ].filter((part): part is string => part !== undefined)
       }),
 
@@ -153,7 +159,7 @@ const locationServiceMapNode = LayerNode.make({
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Skill.node, MCP.node, locationServiceMapNode],
+  deps: [Skill.node, MCP.node, Codebase.node, locationServiceMapNode],
 })
 
 export * as SystemPrompt from "./system"

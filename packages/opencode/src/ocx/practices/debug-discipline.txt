@@ -1,0 +1,19 @@
+---
+name: debug-discipline
+description: Reproduce failures, trace causes, and change one variable before claiming a fix.
+signals: debug, debugging, bug, error, failing, regression, stack trace, root cause
+globs: **/*.test.ts, **/*.spec.ts, **/test_*.py, **/*_test.go
+sources: https://arxiv.org/abs/2304.05128 | 2026-08-28
+---
+## Rules
+- Reproduce the smallest failing case before explaining the cause.
+- Trace the bad value from the trigger to the failing operation.
+- Change one variable and use a check that could disprove the hypothesis.
+- After two failed fixes, question the layer and reread the surrounding code.
+- Keep the original failure visible until a regression check passes.
+
+## Example
+Record the failing command, observed output, changed hunk, causal chain, and next falsifying check.
+
+## Sources
+- https://arxiv.org/abs/2304.05128 (2026-08-28)

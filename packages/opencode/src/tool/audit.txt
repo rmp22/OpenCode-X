@@ -1,3 +1,11 @@
-Record the final evidence-based audit before delivery.
+Record the final evidence-based audit before delivery. This tool records model observations; it does not verify them.
 
-Use this tool after the relevant artifact exists and before final verification. Select review axes from the task and artifact. Record observed findings with severity, evidence, risk, smallest useful fix, and a check that could fail. Record every check with pass, fail, unknown, or not-applicable. Keep unresolved questions in remainingUnknowns. Do not claim a passing audit when evidence is missing.
+Use this tool after the relevant artifact exists and before final verification. Select review axes from the task and artifact. Record observed findings with severity, evidence, risk, smallest useful fix, and a check that could fail. Record every check with pass, fail, unknown, or not-applicable. A pass is reported-pass only until a runtime command, browser result, or deterministic artifact verifier confirms it. Keep unresolved questions in remainingUnknowns. Do not claim a passing audit when evidence is missing.
+
+Field shapes: every list field is a JSON array of strings or objects per its schema, never one sentence. axes is an array of axis names; findings, checks, and remainingUnknowns are arrays even when there is one entry.
+
+NEGATIVE-SPACE RULE: for frontend artifacts, the audit must check what is missing before what is present - loading, error, and empty states; keyboard paths and focus styles; reduced-motion behavior; alt text; intermediate viewport sizes. A missing check on these counts as a fail with status unknown, never as an implicit pass.
+
+OVERLAY RULE: when the artifact has fixed or sticky overlays (nav bars, banners, cookie notices, floating actions), the audit must record a scrolled-render check per overlay: no overlap with content, focus rings, or tap targets at any scroll position. Missing evidence is status unknown, not pass.
+
+EVIDENCE RULE: status verified requires evidenceRef pointing at produced evidence: an ocx_render shot path, an assets/manifest.json entry, a passing command with its output, or a deterministic verifier result. Screenshots, manifests, and command outputs are refs; prose descriptions are not. Checks without refs stay pass (reported-pass/unverified) and block the delivery claim.

@@ -1,12 +1,12 @@
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+- The default branch in this repo is `main`. Use `main` for diffs.
+- Commit directly to the current branch. Create a new branch only when the user explicitly asks.
 
 ## Branch Names
 
-Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
+When the user asks for a new branch, use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
 
 Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
 
@@ -159,3 +159,44 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+## OCX coding pattern
+Every feature integration or hooks should be modular to avoid merge upstream conflicts with opencode codebase.
+
+## OCX Pipeline Work
+
+Applies when changing files under `packages/opencode/src/ocx/**`, the ocx
+touch-points in `session/prompt.ts`, `session/processor.ts`,
+`session/tools.ts`, `effect/runtime-flags.ts`, or `packages/tui/src/ocx/**`.
+
+### Commits
+- Conventional format: `type(ocx): summary`. Types: feat, fix, refactor, test,
+  docs, chore. No AI attribution anywhere in the message.
+- One logical change per commit. Keep ocx core changes separate from prompt
+  text changes so upstream merges stay small.
+
+### Work pattern
+- Measure before optimizing: capture a baseline, change one thing, rerun the
+  same measurement, report both numbers.
+- Verify from `packages/opencode`: `bun typecheck` (expect 0), `bun test
+  test/ocx/`, targeted session tests, then a full `test/session/` run diffed
+  against the clean-tree failure baseline. Never widen the baseline silently.
+- Dogfood enforcement changes against logged sessions before calling them done.
+
+### Module layout
+- New logic lives in `src/ocx/**` as its own module with one job and a self
+  re-export. Core files get thin call sites only, so upstream edits rarely
+  conflict.
+- Turn logic is split under `src/ocx/turn/` (types, state, frame, gate,
+  before-step, claim, header-tool). Keep each file single-purpose.
+
+### Filesystem and Build System Safety
+- Never assume root directory entries or sampled paths are regular files. Directory listings include subdirectories, output folders, and symlinks.
+- Build system marker patterns (e.g. `BUILD`, `WORKSPACE`, `Makefile`) must use case-sensitive exact matching when case-insensitive matching could conflict with common directory names (such as `build`, `workspace`, or `dist`).
+- File-reading loops over discovered candidate paths must handle `EISDIR` and other filesystem errors gracefully instead of using `Effect.orDie`. A single misclassified or unreadable path must not crash session startup, context building, or prompt generation.
+- Tests for path-matching and profile discovery must include negative cases asserting that directories sharing names with build files or markers are not classified as readable files.
+
+Universal codegen standards (naming, comments, structure, magic values,
+verification) ship in the `structure` playbook at
+`src/ocx/prompt/ocx-structure.txt` and are enforced automatically by the exit
+gate and code polish for every session. Do not restate them here.

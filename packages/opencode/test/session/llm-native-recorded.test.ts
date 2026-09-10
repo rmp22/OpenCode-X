@@ -237,6 +237,44 @@ const redactRecordedBody = (body: string) =>
     .replace(/"safety_identifier"\s*:\s*"user-[^"]+"/g, '"safety_identifier":"user_redacted"')
     .replace(/"(access|access_token|refresh|refresh_token|accountId|account_id)"\s*:\s*"[^"]+"/g, '"$1":"redacted"')
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
+
+const parseJsonRecord = (body: string) => {
+  try {
+    const value: unknown = JSON.parse(body)
+    return isRecord(value) ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const isPromptPath = (path: string) =>
+  path === "$.instructions" || path === "$.input[0].content" || path === "$.system[0].text"
+
+const promptMatches = (received: string, recorded: string) =>
+  recorded.split("\n").filter(Boolean).every((line) => received.includes(line))
+
+const jsonMatches = (received: unknown, recorded: unknown, path = "$"): boolean => {
+  if (isPromptPath(path) && typeof received === "string" && typeof recorded === "string")
+    return promptMatches(received, recorded)
+  if (Object.is(received, recorded)) return true
+  if (Array.isArray(received) && Array.isArray(recorded))
+    return received.length === recorded.length && received.every((value, index) => jsonMatches(value, recorded[index], `${path}[${index}]`))
+  if (!isRecord(received) || !isRecord(recorded)) return false
+  const keys = Object.keys(recorded)
+  return keys.length === Object.keys(received).length && keys.every((key) => key in received && jsonMatches(received[key], recorded[key], `${path}.${key}`))
+}
+
+const matchRecordedRequest: HttpRecorder.RequestMatcher = (incoming, recorded) => {
+  if (incoming.method !== recorded.method || incoming.url !== recorded.url) return false
+  if (!jsonMatches(incoming.headers, recorded.headers, "$.headers")) return false
+  const receivedBody = parseJsonRecord(incoming.body)
+  const recordedBody = parseJsonRecord(recorded.body)
+  if (!receivedBody || !recordedBody) return incoming.body === recorded.body
+  return jsonMatches(receivedBody, recordedBody)
+}
+
 function authLayer(scenario: RecordedScenario) {
   const replayAuth = shouldRecord ? scenario.recordAuth?.() : scenario.replayAuth
   if (!replayAuth) return undefined
@@ -278,8 +316,9 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
         mode: "record",
         metadata,
         redactor: HttpRecorderInternal.Redactor.make(redact),
+        match: matchRecordedRequest,
       })
-    : HttpRecorder.http(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
+    : HttpRecorder.http(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact, match: matchRecordedRequest })
   return AppNodeBuilder.build(LayerNode.group([Provider.node, LLM.node]), [
     [LayerNodePlatform.requestExecutor, RequestExecutor.layer.pipe(Layer.provide(recordedHttp))],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalNativeLlm: true })],

@@ -1,0 +1,6 @@
+export * as ParserGate from "./parser"
+export * as LintGate from "./lint"
+export * as FormatGate from "./format"
+export * as TypeGate from "./type"
+export * as ArchGate from "./arch"
+export * as GoogleGate from "../google/gate"

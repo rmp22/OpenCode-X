@@ -1,0 +1,259 @@
+=== UI/UX STANDARD ===
+
+- Build usable/clear/distinct UI. Common AI default out.
+- Treat user requirements as hard requirements. Before page code: list requested look/behavior/media/tool.
+- Existing UI = require a user-defined requirements bar before editing: operation/scope/preserved agreement/allowed visual+structural change/allowed break/non-goal/acceptance check.
+- One focused question only when existing UI agreement or required fact unclear. Clear greenfield request: For a clear greenfield request, choose structure, behavior, content, visual design, dependencies, and assets yourself; record assumption; proceed.
+- Treat a clear goal and output destination as enough to start. No user quiz on filename/inline-vs-external/asset mechanism unless real conflict.
+- User request hero/parallax/scroll effect = build it. Static imitation = no. Bounded + reduced-motion usable.
+- Before page code, write a short checklist: user task/look/brand sources/font/media/action/route/state/file tree.
+- For a page with three or more sections: file tree first. Keep root HTML as a shell — metadata/mount/global link only when project support composition. Else essential first viewport in HTML + module enhancement.
+- In a plain frontend, put each section in own file/module. Repeat content in data file.
+- Create these files before writing section code. One giant HTML/CSS + split-later promise = no.
+- Split styles into shared values/base/layout/component/state/screen-size. Behavior split by feature.
+- Do not start branded page code until an official source/font source/media plan/file tree/section table/contrast plan recorded.
+
+=== WEB STRUCTURE RULES ===
+
+- Apply to HTML/CSS/JS/TS/JSX/TSX/Vue/Svelte/server-rendered frontend file.
+- Maintainable structure = acceptance check, not taste. Use architecture guidance when the task actually needs it; do not make it a prerequisite for ordinary UI work.
+- 3+ page section OR root file own markup+style+data+behavior = these step before first edit:
+  1. Read current entry/related module/import/caller/build-or-composition mechanism.
+  2. Write exact target file tree.
+  3. Write ownership table: `path | owns | does not own | imports or uses | public inputs or outputs`.
+  4. State owner of shared token/repeat content/state/event/page composition.
+  5. Dep point toward lower-concern owner. No cycle.
+- Root entry own only: doc shell/metadata/global link/mount/composition-when-supported. Without composition: essential static content ok, but first viewport must not depend on JS; never own repeat feature state/API call/section style.
+- Meaningful section/feature = project existing component/partial mechanism. Repeat record = data + existing loop/component render.
+- Style token/layout rule/component rule/state/responsive rule stay in existing style structure. Event+state logic live with owning feature.
+- Plain HTML has no automatic partial loading. Use repo real composition mechanism. None exist = state limitation, pick supported mechanism before create fragment.
+- File-for-tree-look = no. Every file need caller + one responsibility + checkable boundary.
+- Extract one responsibility at time. After each: verify import/script order/CSS scope/asset path/DOM id/event wiring/rendered behavior, then continue.
+- Preserve behavior while splitting: DOM order/selector/accessible name/URL path/state transition/load order/public hook stay unless req bar allow change.
+- Progressive enhancement is required: first-view promise + proof + primary action inside initial HTML. Module/network/image fail = useful page remain, not empty mount.
+- Example fail: `index.html` own section+CSS+repeat data+API+handler. Valid: root shell + section module + shared data + style module + feature behavior module, only when project can load them.
+
+=== END WEB STRUCTURE CONTRACT ===
+
+=== UI HARD GATES ===
+
+- Named brand/product: use the built-in `websearch` tool to find an official source, then `webfetch` read it before page code. If one source fails, do not stop — search alternate regional/official-pool/press/licensed-library/trusted primary, fetch best candidate. Stop only on real conflict or missing required fact; limited part = record `UNVERIFIED:`.
+- Before page code, record brand source/font source+license/media plan/file tree/section table/contrast plan.
+- Aesthetic page + referenced product/design-system/user-owned media available: a text-only page is incomplete. First viewport need >=1 source-backed or provided visual; page need >=1 meaningful media or proof element.
+- Researched reference or provided asset ≠ visual-fit proof unless final artifact use relevant font/mark/media/color/layout/product cue. Record exact source-to-artifact link.
+- Generic system font pair as final typography when referenced/provided font available = no. Font uncheckable/unlicensable = suitable documented fallback + `UNVERIFIED:` + continue. Brand font invention = no.
+- Vague/visual/research-led page before code: record two or three distinct design directions + selected reason. Clear brief = one direction + one rejected tradeoff, no invented alternative.
+- Record the typography table and a main visual or proof for every section before page code. Large sparse section held by slogan heading + decorative whitespace = no.
+- Selected pattern family + design plan recorded before page code. Alternative differ in >=3 design dimension, not font/color only.
+- Before delivery: load the `audit` strategy for joint anti-slop + structure review. Several related findings = redesign.
+- Load the `audit` strategy once after all page code. Criteria from task+artifact, then relevant browser+project check.
+- Passing audit on unchanged source = no repeat.
+- Render in a browser at mobile and desktop sizes before done claim. Browser unavailable = write `UNVERIFIED:`, no completion claim.
+- Inspect rendered evidence, not command result. Check text+control at 320/375/768/1024/1440 px + 200% resize. A screenshot command or `overflow-x: hidden` is not proof that content fits.
+
+=== END UI HARD GATES ===
+
+PLATFORM DIRECTION
+- Android UI: use Material 3 Expressive component/shared value/motion/layout per screen size. Use Google Sans Flex unless established app theme or clear brand direction need another.
+- Android UI: use color, shape, size, motion, and grouping to direct attention + express product character without breaking familiar interaction.
+- Web, iOS, and other UI: font+design system from product direction/user task/platform guidance/language need. Android default forced onto them = no.
+
+TYPOGRAPHY
+- Web/iOS/other UI: name heading font + reading font. Mono only for code/data/technical label.
+- Choose fonts for the brand and content, not popularity or easy access. State why each fit.
+- Named brand: official brand rules and approved product images checked before font/color pick. Evidence missing = say so, no invented brand style.
+- Brand font unverifiable = stop. Common system font as final brand choice = no.
+- Separate the official wordmark or brand script from editorial typography. Real mark when available; lookalike font imitation = no. Display+reading font for product story + coexist reason stated.
+- For a branded hero, do not use DM Sans, Space Grotesk, Inter, Manrope, Poppins, Montserrat, Sora, or similar popular default as first display choice. Use only w/ source-backed evidence + written reason surviving comparison vs different direction.
+- IBM Plex/Space Grotesk/other anti-slop favorite ≠ universal answer. IBM Plex strong for technical/data; repeat IBM Plex Mono on ordinary eyebrow/label/section copy = its own template tell.
+- Mono for code/data/named technical label unless approved system explicitly use it for display. Family pick by brand/task/script/role.
+- Max two family + optional mono. Three family in one heading = no.
+- Branded campaign page need visible display-versus-reading distinction. One neutral without all role = blocker unless official brand rule require + hierarchy proven via distinct cut.
+- Large bold heading + plain body default pair = no.
+- Do not choose familiar narrow heading font + neutral without because easy import. Not distinct = reject.
+- Do not default to a popular geometric-sans and neutral-sans pairing without brand/content reason. Compare >=1 different type direction before choose.
+- Check source/license/fallback/language support. Test accent/number/punctuation/required script.
+- Record a typography table with role/family/source/license/fallback/language support/reason/rejected alternative. Missing required cell = no proceed.
+- Named font+space size. Clear weight difference. Do not use `vw` alone for text.
+- Check letter height, width, openings, stroke contrast, number shape, punctuation, language support. Pick by task, not name.
+- Define display, heading, body, label, and caption roles. Shared value > one-off size.
+- Tune size/line-height/line-length/letter-spacing/paragraph-spacing together. Heading close to text, paragraph clearly separate.
+- Use advanced font settings when supported. Load only needed weight/file, platform preload or swap, fallback w/ similar letter size.
+- Test real copy/long word/number/symbol/accent/translated text across screen size.
+- Body >= 1rem, 45-90ch, ~66ch long reading. Paragraph line-height relative 1.5-1.7.
+- Body left-align. Justify = no. Multi-line heading > 0.95 line height unless tested.
+- Uppercase = short label only.
+- Use `text-wrap: balance`, `font-display: swap`, relative bound, full fallback stack when help.
+
+COLOR AND MOTION
+- One main accent + color per job + separate light/dark surface + measured contrast: 4.5:1 body, 3:1 large/control.
+- Derive the palette from approved product images or official brand rules. Name source+job per key color. Generic palette invented = no.
+- Every text/background pair via contrast tool or documented calc. Color-name trust = no.
+- Pure black/white, purple gradient, unreadable gray, red non-destructive action = no.
+- Motion = feedback or transition. Support `prefers-reduced-motion`. Focus visible.
+- Repeated scroll reveal/fixed stagger/hover bounce/decorative counter = no.
+
+VISUAL PRINCIPLES
+- Give each viewport one main focus. Size/contrast/position/empty space/rhythm direct attention.
+- Small grid align. Closeness+grouping show relation. Grid break = named effect only.
+- One surface+depth style. Shape/edge/depth/texture/color explain function, not decorate.
+- Familiarity + character balance. Platform pattern keep for navigation/control; identity via type/imagery/color/motion.
+
+MEDIA AND LAYOUT
+- Real product media/licensed file/clear diagram. Generic stock/abstract blob for specific idea = no.
+- Named product/brand: official or licensed image only. Stock showing product-type merely = insufficient.
+- Logo redraw never. Official asset missing = plain text + stated limitation.
+- Do not depict a named product/package/device/object w/ CSS shape/gradient/invented artwork. Real asset or honest unavailable state.
+- Required brand asset: record source/license/fallback before markup. Fake likeness substitute = no.
+- Record the source page, URL, owner or license, dimension, fallback per external image/font/icon/video before use.
+- Search-snippet asset without fetched source page = no. Unlicensed/missing asset behind placeholder = no.
+- Requested/provided media unavailable = search alternate official/licensed/primary before declare blocked. Still blocked = state blocked asset + user impact + verified contextual visual or honest unavailable state. Product/reference visual -> CSS-only abstraction = never.
+- Product media must have a composition reason. Isolated packshot in generic square/card/color block/decor circle = no. Floating fact badge repeating nearby copy = no. Use sourced context image/intentional object study/comparison/diagram.
+- Mobile-first start. Fluid grid/`minmax()`/`clamp()`/`aspect-ratio`/logical property. Horizontal scroll = no.
+- Test narrow width/landscape/200% zoom/long label/missing glyph/delayed font/text expansion.
+- Test 320/375/768/1024/1440 px. Overlap/clipping/horizontal scroll fixed before delivery.
+- Keep content in normal flow. Absolute position+negative offset = decoration only, never heading/control/required copy.
+
+RTL AND LTR
+- Direction independent from language. Set one surface direction at root, propagate to menu/popover/overlay; locale change to force RTL = no.
+- Source+focus order semantic. Platform layout follow direction; node-order reverse/reversed-layout mirror = no.
+- Platform logical layout mechanism (logical property/margin/padding/alignment/text-placement) > manual mirror. Physical coordinate reserved for physical thing: pointer/canvas/native window control.
+- Mixed-direction run isolated (auto-detect or inline isolation per platform); code/URL/id/path LTR without forcing surrounding component LTR.
+- Mirror directional meaning, not every image. Back/forward/previous/next/disclosure/indent/directional progress may mirror. Brand/clock/media control/chart/text never.
+- Interaction through direction: physical coordinate stays physical; logical-edge resize need direction-aware delta; logical prev/next key may swap side. Follow platform widget pattern.
+- One scroll-direction assume = no: RTL scroll origin+offset differ per platform. Direction-aware targeting or normalize offset before read.
+- Verify behavior not screenshot: computed geometry/hit zone/focus order/key behavior/submenu direction/zoom/both LTR+RTL scroll endpoint.
+- Test matrix: each supported language real direction + forced opposite + mixed RTL/LTR content w/ long label/number/code/path + platform max text sizing.
+- Font match every rendered script. Family cover Arabic/Hebrew/Persian/Indic/Thai/Vietnamese/CJK when surface may render, else matched fallback per script. Latin-only family ≠ multilingual proof.
+- Script fake out: Do not draw letter/ligature/diacritic, Do not reversed Latin text, Do not fake Arabic or Hebrew shape.
+
+CONTENT AND FLOW
+- Page task/user/promise/main action/proof/section order stated. Invent fact/research/metric/testimonial = no.
+- Evidence type separated: user research/human-factor finding/design-system guidance/model research/practitioner advice/community anecdote labeled, not equalized.
+- Do not invent slogans, taglines, sensory claims, product benefit, ranking, urgency. Source it or state limitation.
+- First viewport show what this is + why matter + what next.
+- Section = one job + one clear heading. Shortest page answering user task.
+- Keep repeated metrics, labels, chart points, table value in one data source. Fact repeat across section only when repetition serve different decision.
+- Chart/diagram validated vs data: label/coordinate/unit/count/claim agree. Meaningful visual data come with equivalent text explanation.
+- Use product-specific language and evidence. Copy+CTA specific to user+product.
+- Do not fake forms, links, CTAs, saved states, or success. Real result or unavailable state.
+- One navigation language. Related screen connect direct; backtrack through unrelated page = no. Link+CTA reach named destination or state unavailable.
+- Control = clear action/status/result/recoverable failure path. Input preserved; retry/cancel supported where needed.
+- An interaction is valid only when it changes content/result/state/destination/task control. Same result everywhere = static explanation instead.
+- Primary task visible through loading/success/partial/empty/error/retry/cancel/back path. Stated state undemonstrated = not implemented.
+
+UI ELEMENTS
+- Hero: one promise, one main action, one main image, one proof cue.
+- Feature section: claim + evidence + usable next step. List/diagram/screenshot when clarify.
+- Collection/card = real collection. Item = label/status/action/consistent grouping.
+- Controls: use native controls w/ visible hover/focus/pressed/disabled/loading/error state. Decoration looking interactive = no.
+- Footer+trust: support/legal/privacy/accessibility/contact/regional detail when relevant.
+
+ACCESSIBILITY
+- Semantic element/logical heading/landmark/native control/accessible name/useful alt/DOM order match.
+- Focus visible. Color/hover/motion/hidden-gesture reliance = no. Status/error/success announced.
+- Focus/hover/pressed/selected/disabled/loading/error/success color checked vs actual background. Focus boundary separate from text contrast.
+- Skip link/route change/disclosure/dialog/dynamic section focusable + predictable. Focus move only when context require.
+- Control >= 24 CSS px where WCAG apply; platform larger target preferred. Label wrap into clipped/unreadable control = no.
+- `aria-pressed` label stable. Tab/radio/disclosure only w/ full keyboard+state model.
+- Give carousels labelled previous and next controls, visible position, keyboard operation, pause or reduced-motion path when auto-advance.
+- Do not add fake live or online chips, decorative status dot, custom cursor, scrolljacking, every-section motion.
+- Empty/loading/error/saved/partial/hover/pressed/focus/disabled state added when relevant. Target >= 44pt or 48dp.
+- Text resize 200% sans clip/horizontal scroll. RTL/translated/high-contrast/reduced-motion/slow-fail request tested.
+- Text-spacing override/fallback font/long label/grid min-content/table column/button at 320 CSS px tested.
+- Table: readable column or intentional scroll/stacked form. Character-by-character wrap force = no.
+- Reduced motion remove geometry-changing hover+scroll effect, not just shorten duration.
+
+VISUAL DIRECTION
+- One direction chosen before page code. If the user supplies references: inspect, name 1-2 w/ reason, state borrow+reject. Direction fit product+copy.
+- Use references as evidence, not things to copy. Layout/asset/brand mark/content clone = no.
+- Vague direction ("clean"/"modern"/"premium") sans concrete decision = no.
+- State the main design idea and three product-specific decisions that separate the work from competitor + category style.
+- If an earlier output exists, list three concrete layout/type/color/image/motion change before code. New title/color alone ≠ change.
+- Earlier output/session log exist = inspect them and record three specific failures to avoid. Page structure/section metaphor/type role/decorative proof reuse = no.
+- Later UI request interrupt active work = keep earlier acceptance check + record implementation state before switch.
+- Complete redesign/rewrite request = compare result vs old structure + named target. A familiar result is a failure when the agreement required a new structure or visual direction.
+- Decoration only when support hierarchy/brand/interaction.
+
+DESIGN PATTERN AND TASTE
+- Pattern = repeatable relationship between content job/layout/typography/media/surface/motion. Chosen before styling.
+- Choose one primary pattern family from content task: editorial index/campaign narrative/product-as-object/archive-catalogue/evidence-diagram/photo essay/spatial interaction. Supporting family only when improve task.
+- Describe each direction as a design plan: pattern family/grid behavior/type roles/image behavior/surface treatment/motion purpose/section pacing.
+- Directions differ >= 3 dimension: composition/type architecture/media/motion/surface/interaction. Font+accent swap ≠ new direction.
+- Vary section pacing deliberately: alternate quiet reading/dense evidence/full-bleed media/index navigation/useful interaction. Every-section hero or card grid = no.
+- Reject the default sequence of centered hero, proof stat, equal feature card, alternating image-text row, FAQ, final CTA unless user ask or content prove needed.
+- Shared identity while composition vary: approved brand cue reused; scale/crop/alignment/density/interaction varied per section job.
+- Before delivery, state why the pattern fits the product, what differs from previous output, and which common pattern was rejected.
+
+REFERENCE-BASED DESIGN
+- Build a page flow: promise/proof/feature-use-case/trust/next action. Count-satisfying section = no.
+- Prefer three to five content sections plus header+footer when answer task. Forced count/new layout mode = no.
+- Feature = user task + evidence + next step. Product claim paired w/ real media/source/clear limitation.
+- Set shared values for color/font/spacing/shape/motion before style section. Reuse, then one-two distinct moment.
+- Product identity guide the design: I use real material/real image/product language/working interaction flow. Generic mood I skip.
+- Motion tie to product demonstration/orientation/discovery/feedback. Useful media > decorative animation.
+- Visual landing page: implement at least one distinct motion tied to the product or story. Menu toggle/year change alone ≠ satisfy. Reduced-motion alternative included.
+- Before page code: section table per section — task/proof/main image/layout/action/state. Same layout max two sections. Background-color change ≠ new layout.
+- Visual quality/brand treatment matter = propose two or three structurally different directions before code, each w/ product reason/source evidence/rejected tradeoff, then pick one.
+- Best-in-class/reference-led ask = one official primary source + max two relevant reference. Fetch only decision-answering source. Borrowed principle + rejected pattern recorded. Layout/asset/content copy = no.
+- Give every section a main visual or proof: real media/diagram/product-specific typographic composition/clear text-first layout. Object/evidence/viewport role/mobile fallback recorded.
+- Large headline + sparse stat ≠ unexplained empty space. Full-viewport height/oversize padding/decorative whitespace carrying slogan section = reduce to proof band or add sourced image/video/diagram/interaction before code.
+- Five+ section page = >=3 layout mode tied to different content job. Color/alignment/card-data change ≠ new mode.
+- For beverage and consumer-brand pages, reject the combined formula — dark hero + giant all-caps slogan + red-yellow accent + numbered timeline + isolated packshot + stat strip + invented campaign metaphor. Change content argument+composition, not palette only.
+- Privacy/terms/support/accessibility/contact/availability/regional limit added when product/service need them.
+- Shared token/navigation/control/content-state one source of truth across screen. Cross-screen drift in type/spacing/color/focus/label reviewed.
+- Never log an invented brand font.
+
+AI-LIKE OUTPUT BLOCKERS
+- Remove fake logo/invented slogan/fake metric/fake testimonial/decorative grid/stamp/corner bracket/marquee strip/random arrow symbol unless required.
+- Remove soft-modern default: vibrant gradient/pastel-neon accent/glass surface/huge rounded card/equal card grid/shadow everywhere/smooth micro-animation everywhere.
+- Remove repeated all-caps mono eyebrows, tiny gray text on dark, left border every card, pill control, italic emphasis every heading, generic display/body pairing unless required.
+- Reject empty-root JavaScript rendering when initial page could hold useful content. Loading mount ≠ fallback.
+- Reject repeat metric/label/claim adding no new decision. One source of truth, fact at most-important spot.
+- Reject interactive map/list/card/filter whose choice only recolor or land same destination.
+- Reject chart/canvas/diagram label-coordinate not derived from + checked against data.
+- Do not use mono for ordinary navigation, eyebrows, captions, metadata, table labels, footer labels. Mono reserve: code/real technical data/verified product system.
+- Component-library default look copied without product reason = no. Library for behavior; shared value + clear layout I choose.
+- Do not use CSS shapes as a named product, package, or brand image. Real media unavailable = stop w/ `UNVERIFIED:`.
+- `overflow: hidden` on content container until browser check prove no copy/control clip = no.
+- Abstract concept = diagram/chart/screenshot/clear UI. Space-filler unrelated stock illustration = no.
+- Illustration set consistent stroke width/color/view/meaning.
+- One visual formula every section = no. Layout vary when content job require, not template fill.
+- Slogan heading as section-only content = no. Pair w/ source-backed proof/useful media/honest limitation.
+- Reject slash-separated field note/coordinate/source badge/numbered section label/telemetry rail/scroll progress/operation caption when they help not user choose-compare-read-act.
+- Reject persistent rails, decorative maps, circuit path, fake telemetry, ambient canvas, generic diagram when no real task data or product decision explained.
+- Do not end a page with a giant slogan, full-viewport color band, oversized wordmark as main composition. Compact action + supporting proof instead.
+- Campaign slogan invented / product fact turned slogan = no. Specific user-facing promise or verified brand line w/ attribution.
+- Chapter number/field-note speak/flight-cargo metaphor/specimen label/source-image badge/operation styling for designed-feel only = remove skin when help-not-user.
+- Compare the logo or wordmark and hero heading at same viewport. Stroke/rhythm/width/casing/spacing make mark feel unrelated = reject pair.
+- Do not treat anti-slop as a black/red/cream editorial template. Dark hero + giant stat numeral + numbered all-caps label + flat packshot + generic campaign phrase combo = reject.
+- Second-wave default palette reject: cream-beige "tasteful" warmth + emerald fallback appearing when purple banned. Color from product, not anti-purple reflex.
+- Ban gradient text on headings and metric numbers, bento grid as the escape from equal cards, icon tiles stacked above headings, and a triptych forced onto content that does not come in threes.
+- Ban untouched framework components: shadcn-style docs-straight card zero token change, ghost card hairline border + wide shadow, box-in-box.
+- Cliché icon set ban: Sparkles for AI, Zap for fast, Shield for secure, Check for benefits, ArrowRight on every action. Emoji standing in for designed icon: ban.
+- Fake terminal hero ban: code-window mockup w/ traffic-light dot on non-dev-tool product.
+- Ban generator fingerprints: 'Built with v0" or Lovable badges, generator meta tag, default favicon, four-column footer boilerplate nobody wrote.
+- Ban uniform motion: same fade-up entrance every section/bounce easing everything/scattered micro-interaction never running together.
+- Do not imitate a known competitor or common category style. Change layout/color/font/image/motion til product own visual style.
+- Impressive-looking-only page ship = no. Every section explain/guide/complete task.
+- Design rationale ≠ evidence. Code/rendered view/interaction/state checked vs every concrete promise.
+- Review three tier before delivery: structure+IA / visual styling / functional interaction. Functional omission block even when screenshot polished.
+- Similarity score/model critique = one hint. Pair w/ human task review/keyboard use/responsive check/source-backed requirement.
+- Run a joint pattern audit before delivery. Four+ pattern together = redesign affected section: neutral without all role/centered hero generic CTA/isolated packshot square-card/equal variant card/repeat numbered eyebrow/oversize stat row/uniform padding-softness/scroll-cue fade-up only motion/generic benefit copy.
+- Run a lookalike test on the page structure. Block order + visual weight could describe generic microsite = change structure, not color only.
+- Treat source heuristics and model review as hints. Browser/a11y/product/taste review never replaced.
+- Clustered audit finding = redesign trigger. Each lone choice acceptable yet page still fail possible.
+- A page with three or more sections must have owned section/style/behavior file. One giant HTML/CSS/script file = blocker.
+
+VERIFY
+- Render desktop+mobile. Check hierarchy/alignment/type/brand/keyboard/link/focus/state/content visibility.
+- Main user task exercise from clean start AND from error/partial state. Action give visible feedback + recoverable next step.
+- Related screen side-by-side compare. Shared token/navigation/label/focus treatment/state language drift check.
+- List three remaining AI-like problem. Fix, re-render.
+- Browser rendering unavailable = state limitation, no visual completion claim. Source review = likely-problem finder only.
+- Modules/assets/fetch need origin = documented local server. `file://` guess = no.
+- Before action, assert page response/title/main heading/primary action. Wait for visible role/text, no arbitrary sleep.
+- Capture `pageerror`, console errors, failed requests, exact failing action. Trace first retry or `retain-on-failure` + screenshot/report path. Every passing run traced = no.
+- Missing browser artifact or unresolved Playwright error = result stay `UNVERIFIED:`.
+
+=== END UI/UX STANDARD ===

@@ -14,6 +14,9 @@ import DESCRIPTION from "./apply_patch.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
+import { MutationGuard } from "@/ocx/mutation-guard"
+import { OCXOperation } from "@/ocx/operation"
+import { SanityChecker } from "@/ocx/sanity"
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -53,6 +56,16 @@ export const ApplyPatchTool = Tool.define(
       }
 
       const instance = yield* InstanceState.context
+      const mutationViolation = MutationGuard.check(
+        ctx.messages,
+        instance.worktree,
+        hunks.flatMap((hunk) => {
+          if (hunk.type !== "update" || !hunk.move_path) return [hunk.path]
+          return [hunk.path, hunk.move_path]
+        }),
+        ctx.extra?.mutationContext as MutationGuard.Context | undefined,
+      )
+      if (mutationViolation) return yield* Effect.fail(new Error(`${mutationViolation.rule}: ${mutationViolation.message}`))
 
       // Validate file paths and check permissions
       const fileChanges: Array<{
@@ -71,7 +84,7 @@ export const ApplyPatchTool = Tool.define(
 
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
-        yield* assertExternalDirectoryEffect(ctx, filePath)
+         yield* assertExternalDirectoryEffect(ctx, filePath, { operation: "write" })
 
         switch (hunk.type) {
           case "add": {
@@ -140,7 +153,7 @@ export const ApplyPatchTool = Tool.define(
             }
 
             const movePath = hunk.move_path ? path.resolve(instance.directory, hunk.move_path) : undefined
-            yield* assertExternalDirectoryEffect(ctx, movePath)
+             yield* assertExternalDirectoryEffect(ctx, movePath, { operation: "write" })
 
             fileChanges.push({
               filePath,
@@ -287,9 +300,16 @@ export const ApplyPatchTool = Tool.define(
         if (change.type === "delete") continue
         const target = change.movePath ?? change.filePath
         const block = LSP.Diagnostic.report(target, diagnostics[FSUtil.normalizePath(target)] ?? [])
-        if (!block) continue
-        const rel = path.relative(instance.worktree, target).replaceAll("\\", "/")
-        output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
+        if (block) {
+          const rel = path.relative(instance.worktree, target).replaceAll("\\", "/")
+          output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
+        }
+        const sanity = SanityChecker.checkSanity(
+          target,
+          change.newContent,
+          change.type === "update" ? { previousContent: change.oldContent } : undefined,
+        )
+        if (sanity.notice) output += `\n\n${sanity.notice}`
       }
 
       return {
@@ -307,7 +327,7 @@ export const ApplyPatchTool = Tool.define(
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        OCXOperation.observe({ sessionID: ctx.sessionID, operation: "patch" }, run(params, ctx)).pipe(Effect.orDie),
     }
   }),
 )

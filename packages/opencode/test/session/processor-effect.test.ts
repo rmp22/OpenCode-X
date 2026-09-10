@@ -226,6 +226,48 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+// First call dies after reasoning with an unmapped finish reason; the retry
+// must recover with a real response on the second call. The counter lives
+// inside Stream.unwrap because each retry re-executes the stream, matching
+// how the real LLM service issues a fresh provider request per run.
+const emptyUnknownCounter = { calls: 0 }
+const emptyUnknownLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.unwrap(
+        Effect.sync((): Stream.Stream<LLMEvent> => {
+          emptyUnknownCounter.calls++
+          if (emptyUnknownCounter.calls === 1)
+            return Stream.make(
+              LLMEvent.stepStart({ index: 0 }),
+              LLMEvent.reasoningStart({ id: "r1" }),
+              LLMEvent.reasoningDelta({ id: "r1", text: "thinking" }),
+              LLMEvent.reasoningEnd({ id: "r1" }),
+              LLMEvent.stepFinish({ index: 0, reason: "unknown" }),
+              LLMEvent.finish({ reason: "unknown" }),
+            )
+          return Stream.make(
+            LLMEvent.stepStart({ index: 0 }),
+            LLMEvent.textStart({ id: "t1" }),
+            LLMEvent.textDelta({ id: "t1", text: "recovered" }),
+            LLMEvent.textEnd({ id: "t1" }),
+            LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+            LLMEvent.finish({ reason: "stop" }),
+          )
+        }),
+      ),
+  }),
+)
+const emptyUnknownEnv = LayerNode.compile(root, [...replacements, [LLM.node, emptyUnknownLLM]])
+const itEmptyUnknown = testEffect(emptyUnknownEnv)
+
+const ocxEnv = LayerNode.compile(
+  LayerNode.group([root, LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })]),
+  [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true, ocxPipeline: true })]],
+)
+const itOcx = testEffect(ocxEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -435,6 +477,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          topic: "Search auth files",
         })
 
         const value = yield* handle.process({
@@ -461,7 +504,121 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
         expect(reasoning?.text).toBe("think")
+        expect(reasoning?.metadata?.ocx).toEqual({ topic: "Search auth files" })
         expect(text?.text).toBe("done")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+itOcx.live("session.processor keeps exact reasoning without a hidden polish call", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const raw = "raw reasoning detail ".repeat(40)
+        yield* llm.push(reply().reason(raw).text("done").stop())
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          topic: "Initial reasoning",
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const reasoning = parts.find((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(1)
+        expect(reasoning?.text).toBe(raw)
+        expect(reasoning?.metadata?.ocx).toEqual({ topic: "Initial reasoning" })
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+
+it.live("session.processor effect tests stream raw reasoning deltas when the ocx pipeline is off", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+
+        const thought = "the user asks about launcher folder blur and whether the popup menu needs its own blur pass"
+        yield* llm.push(reply().reason(thought).text("done").stop())
+
+        const deltas: { partID: string; delta: string }[] = []
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== MessageV2.Event.PartDelta.type) return Effect.void
+          const data = evt.data as typeof MessageV2.Event.PartDelta.data.Type
+          deltas.push({ partID: data.partID, delta: data.delta })
+          return Effect.void
+        })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        yield* off
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const reasoning = parts.find((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(1)
+        expect(reasoning?.text).toBe(thought)
+        expect(
+          deltas
+            .filter((delta) => delta.partID === reasoning?.id)
+            .map((delta) => delta.delta)
+            .join(""),
+        ).toBe(thought)
       }),
     { config: (url) => providerCfg(url) },
   ),
@@ -473,7 +630,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
 
-        yield* llm.push(reply().reason("one").reset(), reply().reason("two").stop())
+        yield* llm.push(reply().reason("one").reset(), reply().reason("two").text("done").stop())
 
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "reason")
@@ -661,7 +818,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
         const events = yield* EventV2Bridge.Service
 
         yield* llm.error(503, { error: "boom" })
-        yield* llm.text("")
+        yield* llm.text("ok")
 
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "retry")
@@ -1110,6 +1267,162 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
         expect(seen).toContain(MessageV2.Event.PartUpdated.type)
         expect(seen).toContain(Session.Event.Error.type)
         expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+      }),
+    { config: cfg },
+  ),
+)
+
+it.live("session.processor effect tests retry empty model responses", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(reply().stop())
+        yield* llm.text("after")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "empty")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "empty" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
+        expect(handle.message.error).toBeUndefined()
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests silently nudges with continue on empty responses and succeeds", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+
+        yield* llm.push(reply().stop(), reply().stop(), reply().text("recovered").stop())
+
+        let chatID = ""
+        const errs: string[] = []
+        const states: number[] = []
+        const off = yield* events.listen((evt) => {
+          if (evt.type === SessionStatus.Event.Status.type) {
+            const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+            if (data.sessionID === chatID && data.status.type === "retry") states.push(data.status.attempt)
+          }
+          if (evt.type === Session.Event.Error.type) {
+            const data = evt.data as typeof Session.Event.Error.data.Type
+            if (data.sessionID === chatID && data.error) errs.push(data.error.name)
+          }
+          return Effect.void
+        })
+
+        const chat = yield* session.create({})
+        chatID = chat.id
+        const parent = yield* user(chat.id, "empty")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "empty" }],
+          tools: {},
+        })
+        yield* off
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(3)
+        expect(states).toStrictEqual([])
+        expect(errs).toHaveLength(0)
+        expect(parts.some((part) => part.type === "text")).toBe(true)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+itEmptyUnknown.live("session.processor effect tests retry reasoning-only unknown finishes", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason only")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason only" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("continue")
+        expect(emptyUnknownCounter.calls).toBe(2)
+        expect(parts.some((part) => part.type === "text" && part.text === "recovered")).toBe(true)
+        expect(parts.some((part) => part.type === "reasoning")).toBe(true)
       }),
     { config: cfg },
   ),

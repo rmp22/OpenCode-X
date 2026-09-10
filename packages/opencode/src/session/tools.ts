@@ -1,5 +1,6 @@
 import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import path from "node:path"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
@@ -23,7 +24,16 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { PhaseGuard } from "@/tool/phase-guard"
+import { MutationGuard } from "@/ocx/mutation-guard"
+import { OCXEdit } from "@/ocx/ocx-edit"
+import { OCXToolRail } from "@/ocx/tool-rail"
+import { ScopePermit } from "@/ocx/scope-permit"
+import { ShellPolicy } from "@/ocx/shell-policy"
+import { OperationClassifier } from "@/ocx/operation-classifier"
+import { TokenCompression } from "@/ocx/token-compression"
+import type { OCXDb } from "@/ocx/ocx-db"
+import { WorkstreamRunner } from "@/ocx/workstream-runner"
+import { WorkflowV2 } from "@/ocx/workflow-v2"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -47,6 +57,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
+  mutationContext: MutationGuard.Context
+  planStore?: OCXDb.Store
+  workflow?: unknown
+  currentWorkflow?: () => unknown
+  publishWorkflow?: (workflow: unknown) => Effect.Effect<void>
 }) {
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
@@ -62,7 +77,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      workdir: input.processor.message.path.cwd,
+      worktree: input.processor.message.path.root,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      mutationContext: input.mutationContext,
+      ...(input.workflow ? { workflowGate: input.workflow } : {}),
+      ...(input.currentWorkflow ? { currentWorkflow: input.currentWorkflow } : {}),
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -90,29 +114,49 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         .pipe(Effect.orDie),
   })
 
+  const guard = (toolName: string, ctx: Tool.Context, args?: Record<string, unknown>) =>
+    Effect.gen(function* () {
+      const executionState = input.planStore?.get(ctx.sessionID)
+      if (executionState?.plan) MutationGuard.recordPlan(input.mutationContext)
+      if (flags.ocxPipeline) {
+        const auth = WorkflowV2.Gate.guardTool({
+          toolName,
+          sessionID: ctx.sessionID,
+        })
+        if (!auth.allowed) {
+          throw new Error(auth.renderedFailure ?? auth.reason ?? `Workflow blocked: tool ${toolName} disallowed`)
+        }
+      }
+      return undefined
+    })
+
   for (const item of yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
     permission: input.session.permission,
   })) {
+    if (flags.ocxPipeline && item.id === "strategy") continue
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
-      description: item.description,
+      description: item.id === "edit" ? OCXEdit.describeEdit(item.description) : item.description,
       inputSchema: jsonSchema(schema),
-      execute(args, options) {
+      execute(rawArgs, options) {
         return run.promise(
           Effect.gen(function* () {
+            const args = (flags.ocxPipeline ? TokenCompression.expandJson(input.session.id, rawArgs) : rawArgs) as Record<string, unknown>
             const ctx = context(args, options)
-            const gate = PhaseGuard.toolGate(ctx.sessionID, item.id, args)
-            if (gate) yield* Effect.fail(new Error(gate))
-            PhaseGuard.recordToolCall(ctx.sessionID, item.id, args)
+            const authorization = yield* guard(item.id, ctx, args)
+            guardPlanTarget(item.id, args, ctx, input.planStore)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
               { args },
             )
-            const result = yield* item.execute(args, ctx)
+            const result = yield* (item.id === "edit"
+              ? OCXEdit.runEdit(args, ctx, (resolved) => item.execute(resolved, ctx))
+              : item.execute(args, ctx))
+            recordPlanMutation(item.id, args, ctx, input.planStore)
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -127,7 +171,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
               output,
             )
-            PhaseGuard.recordToolResult(ctx.sessionID, item.id, args, result.metadata)
+            if (!options.abortSignal?.aborted) {
+              const rail = yield* OCXToolRail.syntaxFeedback({ enabled: flags.ocxPipeline, toolID: item.id, args })
+              if (rail) output.output = [output.output, rail].filter(Boolean).join("\n")
+            }
             if (options.abortSignal?.aborted) {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }
@@ -162,7 +209,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
             const ctx = context(toRecord(args), opts)
-            PhaseGuard.recordToolCall(ctx.sessionID, MCP_RESOURCE_TOOLS.list, toRecord(args))
+            yield* guard(MCP_RESOURCE_TOOLS.list, ctx, toRecord(args))
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -246,7 +293,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
             const ctx = context(toRecord(args), opts)
-            PhaseGuard.recordToolCall(ctx.sessionID, MCP_RESOURCE_TOOLS.listTemplates, toRecord(args))
+            yield* guard(MCP_RESOURCE_TOOLS.listTemplates, ctx, toRecord(args))
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -334,7 +381,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const parsed = parseReadMcpResourceArgs(args)
             const ctx = context(toRecord(args), opts)
-            PhaseGuard.recordToolCall(ctx.sessionID, MCP_RESOURCE_TOOLS.read, toRecord(args))
+            yield* guard(MCP_RESOURCE_TOOLS.read, ctx, toRecord(args))
             const clients = yield* mcp.clients()
             const client = clients[parsed.server]
             if (!client) {
@@ -407,7 +454,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
-          PhaseGuard.recordToolCall(ctx.sessionID, key, toRecord(args))
+          yield* guard(key, ctx, args)
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
@@ -504,6 +551,106 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 function toRecord(value: unknown) {
   if (isRecord(value)) return value
   return {}
+}
+
+function targetFromArgs(args: Record<string, unknown>): string | undefined {
+  for (const key of ["filePath", "file_path", "fPth", "fp", "path", "pth", "target", "tgt"]) {
+    const value = args[key]
+    if (typeof value === "string" && value.trim()) return value
+  }
+  return undefined
+}
+
+function targetFromToolArgs(toolName: string, args: unknown): string[] {
+  const input = toRecord(args)
+  if (toolName === "apply_patch") {
+    const patch = typeof input.patchText === "string" ? input.patchText : ""
+    return [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)].map((match) => match[1]!.trim())
+  }
+  const target = targetFromArgs(input)
+  return target ? [target] : []
+}
+
+function shellMutationTargets(toolName: string, args: unknown, ctx: Tool.Context): {
+  targets: string[]
+  unresolved: boolean
+} {
+  if (!["bash", "shell"].includes(toolName)) return { targets: [], unresolved: false }
+  const input = toRecord(args)
+  const command = typeof input.command === "string" ? input.command : (typeof input.cmd === "string" ? input.cmd : "")
+  if (!command) return { targets: [], unresolved: false }
+  const worktree = typeof ctx.extra?.worktree === "string" ? ctx.extra.worktree : "/"
+  const defaultCwd = typeof ctx.extra?.workdir === "string" ? ctx.extra.workdir : worktree
+  const requestedCwd = typeof input.workdir === "string" ? path.resolve(defaultCwd, input.workdir) : defaultCwd
+  const analysis = ShellPolicy.writeTargetAnalysis(command, requestedCwd, worktree)
+  return { targets: [...analysis.targets], unresolved: analysis.unresolved }
+}
+
+function mutationTargets(toolName: string, args: unknown, ctx: Tool.Context): {
+  targets: string[]
+  unresolved: boolean
+} {
+  const shell = shellMutationTargets(toolName, args, ctx)
+  if (shell.targets.length > 0 || shell.unresolved) return shell
+  if (!["write", "edit", "apply_patch"].includes(toolName)) return { targets: [], unresolved: false }
+  return { targets: targetFromToolArgs(toolName, args), unresolved: false }
+}
+
+function guardPlanTarget(toolName: string, args: unknown, ctx: Tool.Context, store: OCXDb.Store | undefined): void {
+  if (!store) return
+  const currentPlan = store.get(ctx.sessionID)?.plan
+  if (!currentPlan) return
+  const mutation = mutationTargets(toolName, args, ctx)
+  if (mutation.targets.length === 0 && !mutation.unresolved) return
+  const plan = { store, sessionID: ctx.sessionID }
+  if (mutation.unresolved)
+    throw new Error("UNKNOWN_DANGEROUS_EFFECT target=unknown-shell-write next=make the write target explicit before retrying")
+  if (!WorkstreamRunner.hasActiveStep(plan)) {
+    const next = WorkstreamRunner.nextReadyStep(plan)
+    if (next) WorkstreamRunner.activateStep(plan, next.workstreamID, next.stepID)
+  }
+  const worktree = typeof ctx.extra?.worktree === "string" ? ctx.extra.worktree : "/"
+  const invalid = mutation.targets.filter((target) => !WorkstreamRunner.isAllowedTarget(plan, worktree, target))
+  if (invalid.length > 0) {
+    WorkflowV2.Db.insertDeviation({
+      id: `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      session_id: ctx.sessionID,
+      kind: "plan-target-expansion",
+      detail: { targets: invalid, tool: toolName },
+      created_at: Date.now(),
+    })
+    for (const target of invalid) {
+      WorkstreamRunner.recordMutation(plan, target)
+    }
+  }
+}
+
+function recordPlanMutation(toolName: string, args: unknown, ctx: Tool.Context, store: OCXDb.Store | undefined): void {
+  if (!store) return
+  const mutation = mutationTargets(toolName, args, ctx)
+  if (mutation.unresolved || mutation.targets.length === 0) return
+  const plan = { store, sessionID: ctx.sessionID }
+  const worktree = typeof ctx.extra?.worktree === "string" ? ctx.extra.worktree : "/"
+  if (!WorkstreamRunner.hasActiveStep(plan)) {
+    const next = WorkstreamRunner.nextReadyStep(plan)
+    if (next) WorkstreamRunner.activateStep(plan, next.workstreamID, next.stepID)
+  }
+  for (const target of mutation.targets) {
+    if (WorkstreamRunner.isAllowedTarget(plan, worktree, target)) {
+      WorkstreamRunner.recordMutation(plan, target)
+      const active = WorkstreamRunner.activeStep(plan)
+      if (active && active.step.targets.some((t) => target.endsWith(t) || t.endsWith(target))) {
+        for (const check of active.step.checks) {
+          WorkstreamRunner.recordVerifiedEvidence(plan, {
+            check: check.id,
+            status: "passed",
+            evidence: `${toolName} mutated ${target}`,
+            source: "artifact",
+          })
+        }
+      }
+    }
+  }
 }
 
 function parseListMcpResourcesArgs(value: unknown) {

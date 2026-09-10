@@ -1,0 +1,18 @@
+---
+name: google-eng-practices
+description: Code review standards, small atomic CLs, and informative changelist descriptions.
+signals: google-review, cl-description, small-cls, google-eng-practices, cl-review
+globs: **/*
+sources:
+- https://google.github.io/eng-practices/ | 2026-09-01
+---
+## Rules
+- Standard of Code Review: Reviewers should favor approving a change once it definitely improves the overall code health of the system, even if not perfect.
+- Mentoring vs Blocking: Mentoring is essential, but approval should not be withheld for purely optional suggestions. Label non-blocking suggestions clearly with 'nit:'.
+- Speed of Review: Provide code review feedback rapidly, within one business day, to maintain team velocity and avoid context-switching costs.
+- Small CLs: Keep changes small and atomic. A change should represent one self-contained logical modification, typically under 200-400 lines of code. Split changes exceeding 500 lines or 15 files into milestones.
+- Informative Descriptions: First line is an imperative title <= 72 characters explaining what the change does, followed by a blank line, context/rationale, and an explicit test plan ('Tested: ...').
+- Dead Code: Delete dead or obsolete code immediately; do not leave commented-out code blocks in the repository.
+
+## Sources
+- https://google.github.io/eng-practices/ (2026-09-01)

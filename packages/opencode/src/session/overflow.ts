@@ -11,12 +11,13 @@ export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outpu
   const context = input.model.limit.context
   if (context === 0) return 0
 
+  const output = ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax)
   const reserved =
     input.cfg.compaction?.reserved ??
-    Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
-  return input.model.limit.input
-    ? Math.max(0, input.model.limit.input - reserved)
-    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
+    Math.min(COMPACTION_BUFFER, output)
+  const inputLimit = input.model.limit.input
+  if (inputLimit) return Math.max(0, Math.min(inputLimit, context) - reserved)
+  return Math.max(0, context - output)
 }
 
 export function isOverflow(input: {

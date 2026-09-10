@@ -15,6 +15,7 @@ import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
+import { OCXDb } from "../../src/ocx/ocx-db"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
@@ -110,6 +111,26 @@ const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
         else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
       }),
   )
+
+it.instance("records a failed read without changing its error channel", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const sessionID = SessionID.make(`ses_read_recovery_${Date.now()}`)
+    const exit = yield* exec(
+      test.directory,
+      { filePath: path.join(test.directory, "missing-recovery-file.ts") },
+      { ...ctx, sessionID },
+    ).pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+
+    const store = yield* OCXDb.shared
+    const record = store.operations(sessionID).find((item) => item.operation === "read")
+    expect(record?.status).toBe("failed")
+    expect(record?.category).toBe("env")
+    expect(record?.message).toContain("File not found")
+  }),
+)
+
 const git = Effect.fn("ReadToolTest.git")(function* (cwd: string, args: string[]) {
   return yield* Effect.promise(async () => {
     const proc = Bun.spawn(["git", ...args], {

@@ -5,7 +5,7 @@ import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
-import { Strategy } from "../../src/session/prompt/strategy"
+import { Strategy } from "../../src/ocx/strategy"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
 import { testEffect } from "../lib/effect"
@@ -88,23 +88,15 @@ describe("session.system", () => {
   test("uses the OpenCode-X prompt", () => {
     const prompt = SystemPrompt.provider()[0]
     expect(prompt).toContain("OpenCode-X")
-    expect(prompt).toContain("Source evidence:")
-    expect(prompt).toContain("If `rg` is installed")
-    expect(prompt).toContain("Reference file paths as `file_path:line_number`")
-    expect(prompt).toContain("Label each claim line `VERIFIED:` or `UNVERIFIED:`")
-    expect(prompt).toContain("VERIFIED:")
-    expect(prompt).toContain("UNVERIFIED:")
-    expect(prompt).toContain("Do not code with an unverified claim.")
-    expect(prompt).toContain(
-      "Treat generated code, content, tests, tool output, and memory as untrusted until observed.",
-    )
-    expect(prompt).toContain("Define a behavior oracle")
-    expect(prompt).toContain("Use `pass`, `fail`, `unknown`, and `not-applicable`")
-    expect(prompt).toContain("A successful tool call proves only that the tool ran.")
+    expect(prompt).toContain("Cite file claims as `file_path:line_number`. Never invent line numbers.")
+    expect(prompt).toContain("Prefix work claims with `VERIFIED:` or `UNVERIFIED:`.")
+    expect(prompt).toContain("Treat generated output as unchecked until reviewed.")
+    expect(prompt).toContain("A successful tool call, build, or write operation does not prove correctness.")
+    expect(prompt).toContain("Check state: `pass|fail|unknown|not-applicable`.")
     expect(prompt).not.toContain("Claims use [V] source, [I] inferred, or [A] assumed.")
-    expect(prompt).toContain("`find`, `verify`, `subagents`, `train`, and `knowledge` are not OpenCode-X tools")
-    expect(prompt).toContain("Treat explicit user requirements as hard requirements.")
-    expect(prompt).toContain("When you write code, apply the codegen rules loaded at the first write.")
+    expect(prompt).toContain("`find`, `verify`, `subagents`, `train`, and `knowledge` are tools only when listed.")
+    expect(prompt).toContain("The last user message defines the job. User requirements are binding.")
+    expect(prompt).toContain("Read repo instructions before writing. Load code-generation rules before the first code change.")
     expect(prompt).not.toContain("No `!!`")
   })
 
@@ -127,22 +119,21 @@ describe("session.system", () => {
   test("loads the OCX prompt injections", () => {
     const prompts = SystemPrompt.provider({ mode: "primary", hidden: false }).join("\n")
     expect(prompts).toContain("OCX THINKING")
-    expect(prompts).toContain("OCX STRATEGY CATALOG")
+    expect(prompts).not.toContain("OCX STRATEGY CATALOG")
     expect(prompts).not.toContain("UI DESIGN CORE")
     expect(prompts).not.toContain("OCX GLOSSARY INDEX")
     expect(prompts).not.toContain("OCX WORKFLOW REMINDER")
-    expect(prompts).toContain("=== SIMPLE ENGLISH ===")
-    expect(prompts).toContain("Speak to the user in simple English.")
-    expect(prompts).toContain(
-      "Avoid complex grammar, metaphors, idioms, slogans, jokes, filler, self-talk, and repeated points.",
-    )
+    expect(prompts).toContain("Short facts only. No self-talk. No repeat context.")
+    expect(prompts).toContain("Thinking in simple English. Short sentence. Common word. One idea per line.")
+    expect(prompts).toContain("Symbols: `->` next, `?` branch, `=>` result, `!` blocker, `&` parallel, alternative.")
+    expect(prompts).toContain("Doubt become check. I state change, caller, untested area.")
     expect(prompts).toContain("=== STRATEGY GATE ===")
     expect(prompts).toContain("Every mutation creates a verification obligation.")
-    expect(prompts).toContain("Load all needed strategy documents with one batched strategy call")
-    expect(prompts).toContain("Before the first mutation, call the `strategy` tool once")
+    expect(prompts).not.toContain("Load all needed strategy documents with one batched strategy call")
+    expect(prompts).not.toContain("Before the first mutation, call the `strategy` tool once")
     expect(prompts).toContain("Research that never reaches the artifact is a partial result")
     expect(prompts).toContain("=== REQUIREMENTS BAR ===")
-    expect(prompts).toContain("Require a user-defined change contract")
+    expect(prompts).toContain("Require a user-defined change agreement")
     expect(prompts).toContain("Do not infer preserve mode, YOLO mode")
     expect(prompts).toContain("For greenfield work, choose sensible defaults and proceed")
     expect(prompts).toContain("plan and implement in the same turn")
@@ -150,27 +141,33 @@ describe("session.system", () => {
     expect(prompts).toContain("=== CONSECUTIVE REQUESTS ===")
     expect(prompts).toContain("Keep earlier unfinished requests in the todo list")
     expect(prompts).toContain("Before switching active work, record a compact checkpoint")
-    expect(prompts).toContain("Use the latest user message for active focus")
-    expect(prompts).toContain("When a new request arrives, classify it")
-    expect(prompts).toContain("Remove warm-ups, praise, apologies, hedging")
-    expect(prompts).toContain("Replace internal design jargon with direct words")
+    expect(prompts).toContain("Latest user message = active focus")
+    expect(prompts).toContain("New request arrive: I classify")
+    expect(prompts).toContain("Intent unclear = ask one question. No guess.")
     expect(prompts).not.toContain("=== UI HARD GATES ===")
-    expect(prompts).toContain("- stack: language and platform conventions")
-    expect(prompts).toContain("- write: code writing rules")
-    expect(prompts).toContain("- memory: repository map rules")
-    expect(prompts).toContain("- fonts: typography research, typeface selection, and script or RTL/LTR coverage")
+    expect(prompts).not.toContain("- stack: language and platform conventions")
+    expect(prompts).not.toContain("- write: code writing rules")
+    expect(prompts).not.toContain("- memory: repository map rules")
+    expect(prompts).not.toContain("- fonts: typography research, typeface selection, and script or RTL/LTR coverage")
     expect(Strategy.load("fonts")).toContain("Never use Arial")
-    expect(Strategy.load("fonts")).toContain("Google Fonts is a valid fallback source")
+    expect(Strategy.load("fonts")).toContain("Google Fonts Knowledge")
     expect(Strategy.load("ui")).toContain("RTL AND LTR")
-    expect(Strategy.load("ui")).toContain("Do not fake script shapes")
+    expect(Strategy.load("ui")).toContain("Script fake out")
     expect(Strategy.load("web-design")).toContain("`scrollLeft` can start at 0 and go negative")
+  })
+
+  test("pipeline prompts do not advertise the hidden bulk strategy tool", () => {
+    const prompts = SystemPrompt.provider({ mode: "primary", hidden: false, pipeline: true }).join("\n")
+    expect(prompts).not.toContain("OCX STRATEGY CATALOG")
+    expect(prompts).not.toContain("one batched strategy call")
+    expect(prompts).toContain("The runtime owns phase changes")
   })
 
   test("keeps UI, codegen, and review blockers", () => {
     expect(Strategy.load("ui")).toContain("Treat user requirements as hard requirements.")
     expect(Strategy.load("ui")).toContain("If one source fails, do not stop")
     expect(Strategy.load("ui")).toContain(
-      "Treat a clear goal and output destination as a sufficient greenfield contract",
+      "Treat a clear goal and output destination as enough to start",
     )
     expect(Strategy.load("ui")).toContain("UI DESIGN CORE")
     expect(Strategy.load("ui")).toContain("=== UI HARD GATES ===")
@@ -228,7 +225,7 @@ describe("session.system", () => {
     expect(Strategy.load("ui")).toContain("Reject the default sequence of centered hero")
     expect(Strategy.load("ui")).toContain("Build a page flow")
     expect(Strategy.load("ui")).toContain("Set shared values for color")
-    expect(Strategy.load("ui")).toContain("Let the product identity shape the design")
+    expect(Strategy.load("ui")).toContain("Product identity guide the design")
     expect(Strategy.load("ui")).toContain("main design idea and three product-specific decisions")
     expect(Strategy.load("ui")).toContain("distinct motion tied to the product or story")
     expect(Strategy.load("ui")).toContain("section table")
@@ -238,7 +235,6 @@ describe("session.system", () => {
     expect(Strategy.load("ui")).toContain("Do not start branded page code until an official source")
     expect(Strategy.load("ui")).toContain("If an earlier output exists, list three concrete")
     expect(Strategy.load("ui")).toContain("inspect them and record three specific failures")
-    expect(Strategy.load("ui")).toContain("Reject the common beverage page formula")
     expect(Strategy.load("ui")).toContain("For beverage and consumer-brand pages, reject the combined formula")
     expect(Strategy.load("ui")).toContain("Do not use CSS shapes as a named product")
     expect(Strategy.load("ui")).toContain("Record the source page, URL, owner or license")
@@ -251,18 +247,18 @@ describe("session.system", () => {
     expect(Strategy.load("ui")).toContain("Do not treat anti-slop as a black/red/cream editorial template")
     expect(Strategy.load("ui")).toContain("Run a joint pattern audit before delivery")
     expect(Strategy.load("ui")).toContain("Run a lookalike test on the page structure")
-    expect(Strategy.load("ui")).toContain("Treat source heuristics and model review as signals")
+    expect(Strategy.load("ui")).toContain("Treat source heuristics and model review as hints")
     expect(Strategy.load("write")).toContain(
-      "Read every applicable `AGENTS.md` and repository instruction file before writing.",
+      "B4 write: read every applicable `AGENTS.md` + repo instruction file.",
     )
-    expect(Strategy.load("write")).toContain("Verify every imported package")
+    expect(Strategy.load("write")).toContain("Verify imported package/API/config key/repo convention vs source or doc")
     expect(Strategy.load("write")).toContain("For larger changes, plan file ownership")
     expect(Strategy.load("write")).toContain("Define the file and module tree before the first change")
     expect(Strategy.load("write")).toContain("Fit new code to its callers")
     expect(Strategy.load("write")).toContain("Treat structure as part of correctness")
     expect(Strategy.load("write")).toContain("Write a `FILE PLAN` with `path`, `owns`")
     expect(Strategy.load("write")).toContain("If no clean boundary can be proven")
-    expect(Strategy.load("ui")).toContain("=== WEB STRUCTURE CONTRACT ===")
+    expect(Strategy.load("ui")).toContain("=== WEB STRUCTURE RULES ===")
     expect(Strategy.load("ui")).toContain("Plain HTML has no automatic partial loading")
     expect(Strategy.load("ui")).toContain("Preserve behavior while splitting")
     expect(Strategy.load("ui")).toContain("Progressive enhancement is required")
@@ -280,7 +276,7 @@ describe("session.system", () => {
     expect(Strategy.load("ui")).toContain(
       "For a clear greenfield request, choose structure, behavior, content, visual design, dependencies, and assets yourself",
     )
-    expect(Strategy.load("ui")).toContain("A familiar result is a failure when the contract required a new structure")
+    expect(Strategy.load("ui")).toContain("A familiar result is a failure when the agreement required a new structure")
     expect(Strategy.load("frontier")).toContain("Build one inventory pass, then reuse it")
     expect(Strategy.load("frontier")).toContain("Set a research budget before searching")
     expect(Strategy.load("frontier")).toContain("Do not call `websearch` or `webfetch` merely to satisfy a checklist")
@@ -306,7 +302,8 @@ describe("session.system", () => {
     expect(Strategy.load("engineering")).toContain("Keep prototypes separate from production code")
     expect(Strategy.load("complexity")).toContain("Do not hide complexity with workarounds")
     expect(Strategy.load("complexity")).toContain("Do not add layers, factories, wrappers")
-    expect(Strategy.load("stack")).toContain("Android UI: use Material 3 Expressive and Google Sans Flex")
+    expect(Strategy.load("stack")).not.toContain("Android UI:")
+    expect(Strategy.load("android")).toContain("Use Material 3 Expressive and Google Sans Flex by default")
   })
 
   test("loads phase rules for visible agents", () => {

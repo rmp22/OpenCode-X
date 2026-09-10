@@ -515,7 +515,7 @@ describe("session.llm-native.request", () => {
             },
           } satisfies Tool,
         },
-        { messages: [] as ModelMessage[], abort: new AbortController().signal },
+        { sessionID: "ses_native_tool", messages: [] as ModelMessage[], abort: new AbortController().signal },
       )
 
       const failure = yield* Effect.flip(wrapped.explode.execute({}, { id: "call-1", name: "explode" }))
@@ -531,7 +531,7 @@ describe("session.llm-native.request", () => {
       // wiring is wrong; we want a typed failure, not a silent skip or unhandled exception.
       const wrapped = LLMNativeRuntime.nativeTools(
         { incomplete: { description: "no execute", inputSchema: jsonSchema({ type: "object" }) } satisfies Tool },
-        { messages: [] as ModelMessage[], abort: new AbortController().signal },
+        { sessionID: "ses_native_tool", messages: [] as ModelMessage[], abort: new AbortController().signal },
       )
 
       const failure = yield* Effect.flip(wrapped.incomplete.execute({}, { id: "call-1", name: "incomplete" }))
@@ -573,6 +573,7 @@ describe("session.llm-native.request", () => {
         generate: () => Effect.die("unused"),
       } as LLMClientShape
       const native = LLMNativeRuntime.stream({
+        sessionID: "ses_native_stream",
         model: baseModel,
         provider: providerInfo,
         auth: undefined,
@@ -727,6 +728,7 @@ describe("session.llm-native.request", () => {
 
       const llmClient = yield* LLMClient.Service
       const native = LLMNativeRuntime.stream({
+        sessionID: "ses_native_oauth",
         model: baseModel,
         provider: { ...providerInfo, options: { apiKey: OAUTH_DUMMY_KEY, fetch: customFetch } },
         auth: { type: "oauth", refresh: "refresh", access: "access", expires: Date.now() + 60_000 },

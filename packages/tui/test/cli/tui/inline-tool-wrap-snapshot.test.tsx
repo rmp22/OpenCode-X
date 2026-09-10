@@ -14,12 +14,10 @@ import {
   parseQuestions,
   parseTodos,
   alwaysSeparate,
-  formatAuditLabel,
-  formatDesignLabel,
-  formatStructureLabel,
-  formatStrategyNames,
+  parseStructurePaths,
   toolDisplay,
 } from "../../../src/routes/session"
+import { auditLabel, strategyLabel } from "../../../src/ocx/text"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
 
@@ -237,17 +235,23 @@ describe("TUI inline tool wrapping", () => {
   })
 
   test("shows batched strategy names", () => {
-    expect(formatStrategyNames({ names: ["web", "ui", "strategy"] })).toBe("web, ui, strategy")
-    expect(formatStrategyNames({ name: "browser" })).toBe("browser")
-    expect(formatStrategyNames({ names: ["web", 1, null, "web"] })).toBe("web")
+    expect(strategyLabel({ names: ["web", "ui", "strategy"] })).toBe("Strategy: web, ui, strategy")
+    expect(strategyLabel({ name: "browser" })).toBe("Strategy: browser")
+    expect(strategyLabel({ names: ["web", 1, null, "web"] })).toBe("Strategy: web")
+    expect(strategyLabel({})).toBe("Strategy")
   })
 
   test("shows structure and audit calls", () => {
-    expect(formatStructureLabel({ files: [{ path: "index.html" }, { path: "styles.css" }] })).toBe("Structure 2 files")
-    expect(formatAuditLabel({ artifact: "landing page", axes: ["structure", "responsive"] })).toBe(
-      "Audit landing page (structure, responsive)",
+    expect(parseStructurePaths({ files: [{ path: "index.html" }, { path: "styles.css" }] })).toEqual([
+      "index.html",
+      "styles.css",
+    ])
+    expect(parseStructurePaths({ files: [null, { path: "" }, { path: 3 }, "a.ts"] })).toEqual([])
+    expect(parseStructurePaths({})).toEqual([])
+    expect(auditLabel({ artifact: "landing page", axes: ["structure", "responsive"] })).toBe(
+      "Audit: landing page (structure, responsive)",
     )
-    expect(formatDesignLabel({ direction: "field index" })).toBe("Design field index")
+    expect(auditLabel({})).toBe("Audit")
   })
 
   test("replaces pending copy when a tool fails before completion", async () => {

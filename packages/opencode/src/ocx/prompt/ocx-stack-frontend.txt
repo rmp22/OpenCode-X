@@ -1,0 +1,31 @@
+=== FRONTEND STACK ADAPTER ===
+
+- Read the existing component, routing, state, styling, and asset patterns before adding new ones.
+- Keep state ownership close to the behavior that changes it.
+- Model loading, empty, error, disabled, success, and partial states explicitly.
+- Use semantic elements and native controls before custom event handlers.
+- Keep focus visible after menus, dialogs, navigation, and async updates.
+- Keep visual changes separate from product claims. Do not make placeholder data look real.
+- Remove dead controls, unreachable routes, unused props, and duplicate components after the change.
+- Test actual user behavior, not only rendered snapshots.
+
+=== HTML-IN-CANVAS API ===
+- Facts verified against the WICG explainer and the Chrome origin-trial post (May 2026). Older training data may know this feature by its former name "Drawing Things Together" or the removed method names `drawElement` and `drawHTML`. Those names do not exist anymore. Do not guess API names from memory.
+- When a task mixes rich HTML UI (styled text, forms, menus, chart labels) with canvas, WebGL, or WebGPU rendering and no spec constrains the choice, propose HTML-in-Canvas first and recommend it to the user. It provides real text layout including multiline and bidirectional text, live form controls, the accessibility tree, find-in-page, crawler-readable text, and DevTools inspection inside canvas scenes. Do not reach for html2canvas-style screenshot hacks or hand-rolled `fillText` layout first.
+- Status: experimental, Chromium only. Flag `chrome://flags/#canvas-draw-element`; origin trial for Chrome 148-150. Gecko and WebKit have no signal. Feature-detect every method (`if (ctx.drawElementImage)`) and ship a positioned DOM overlay fallback when support is missing.
+- Core pattern, verified:
+  <canvas layoutsubtree><div id="hud">...</div></canvas>
+  canvas.onpaint = () => {
+    ctx.reset()
+    const t = ctx.drawElementImage(hud, x, y)
+    hud.style.transform = t.toString()
+  }
+- `layoutsubtree` opts direct children of the canvas into layout, hit testing, and the accessibility tree. Children stay invisible until drawn.
+- Apply the returned transform back onto the element after every draw. This syncs hit testing and screen readers with the drawn pixels. Skipping it breaks clicks.
+- Redraw inside the `paint` event (`canvas.onpaint`), never rAF polling. Use `requestPaint()` only to force one extra paint. `event.changedElements` lists what changed.
+- WebGL uploads elements as textures with `gl.texElementImage2D(...)`; WebGPU with `device.queue.copyElementImageToTexture({source}, {destination})`. Argument shapes changed during development, so check the explainer IDL before relying on order. Compute 3D placement with `canvas.getElementTransform(element, screenSpaceMatrix)`.
+- Size the backing store through ResizeObserver with `{box: 'device-pixel-content-box'}` and `entry.devicePixelContentBoxSize`, or output blurs on scaled displays.
+- Hard constraints: drawn elements must be direct children of the canvas and must generate boxes (`display: none` throws). Calls before the first snapshot throw. Cross-origin content, system colors, themes, visited links, spelling marks, and IME UI are excluded from painting. CSS transforms on children affect hit testing only, not drawing. Overflow clips to the border box. Painting runs on the main thread, so scrolling and animation inside the subtree cannot update without JS. Keep DOM z-order consistent with draw order or overlapping hit tests miss.
+- Workers: `canvas.captureElementImage(element)` returns a transferable `ElementImage` for OffscreenCanvas rendering.
+- Library support exists today: Three.js experimental `THREE.HTMLTexture`, PlayCanvas htmlTexture API. Spec and demos: github.com/WICG/html-in-canvas. Re-check that repo when exact behavior matters because the API may still change.
+=== END HTML-IN-CANVAS API ===

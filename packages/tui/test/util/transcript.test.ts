@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatAssistantHeader, formatMessage, formatPart, formatTranscript } from "../../src/util/transcript"
+import { formatAssistantHeader, formatMessage, formatPart, formatTranscript, type MessageWithParts } from "../../src/util/transcript"
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 
 const providers: Provider[] = [
@@ -119,6 +119,18 @@ describe("transcript", () => {
       }
       const result = formatPart(part, options)
       expect(result).toBe("Hello world\n\n")
+    })
+
+    test("strips attention control tags from exported text", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "text",
+        text: 'Surveying.\n<focus segments="tool:abc">\nChecking.\n</focus>\nDone.',
+      }
+      const result = formatPart(part, options)
+      expect(result).toBe("Surveying.\nChecking.\nDone.\n\n")
     })
 
     test("skips synthetic text parts", () => {
@@ -416,6 +428,106 @@ describe("transcript", () => {
       expect(result).toContain("## Assistant\n\n")
       expect(result).not.toContain("Build")
       expect(result).not.toContain("claude-sonnet-4-20250514")
+    })
+
+    test("formats ocx workflow, phase, and leading entries with execution status", () => {
+      const session = {
+        id: "ses_abc123",
+        title: "Test Session",
+        time: { created: 1000000000000, updated: 1000000001000 },
+      }
+      const messages: MessageWithParts[] = [
+        {
+          info: {
+            id: "msg_0",
+            sessionID: "ses_abc123",
+            role: "user",
+            time: { created: 1000000000000 },
+            agent: "build",
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+          },
+          parts: [{ id: "p0", sessionID: "ses_abc123", messageID: "msg_0", type: "text" as const, text: "Build site" }],
+        },
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "ses_abc123",
+            role: "assistant",
+            agent: "build",
+            modelID: "claude-sonnet-4-20250514",
+            providerID: "anthropic",
+            mode: "",
+            parentID: "msg_0",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0.001,
+            tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 1000000000100, completed: 1000000000600 },
+          },
+          parts: [{ id: "p1", sessionID: "ses_abc123", messageID: "msg_1", type: "text" as const, text: "Done" }],
+          ocxEntries: [
+            { kind: "workflow", value: "codegen", summary: "selected for this request" },
+            { kind: "phase", value: "change", summary: "switched from plan" },
+            { kind: "playbook", value: "structure", summary: "loaded for session", state: "completed", detail: "Enforced modularity" },
+          ],
+        },
+      ]
+
+      const result = formatTranscript(session, messages, {
+        thinking: false,
+        toolDetails: false,
+        assistantMetadata: false,
+        leadingOcxEntries: [
+          { kind: "workflow", value: "system", summary: "initialized", state: "completed" },
+        ],
+      })
+
+      expect(result).toContain("## Session Initialization")
+      expect(result).toContain("◈ Workflow: system initialized")
+      expect(result).toContain("◈ Workflow: codegen selected for this request")
+      expect(result).toContain("◈ Phase: change switched from plan")
+      expect(result).toContain("✓ ◈ structure loaded for session")
+      expect(result).toContain("Enforced modularity")
+    })
+
+    test("formats audit activity and each playbook pass in order", () => {
+      const session = {
+        id: "ses_audit",
+        title: "Audit Session",
+        time: { created: 1000000000000, updated: 1000000001000 },
+      }
+      const message: MessageWithParts = {
+        info: {
+          id: "msg_audit",
+          sessionID: "ses_audit",
+          role: "assistant",
+          agent: "build",
+          modelID: "claude-sonnet-4-20250514",
+          providerID: "anthropic",
+          mode: "",
+          parentID: "msg_user",
+          path: { cwd: "/test", root: "/test" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1000000000100, completed: 1000000000200 },
+        },
+        parts: [{ id: "p_audit", sessionID: "ses_audit", messageID: "msg_audit", type: "text", text: "Audit complete" }],
+        ocxEntries: [
+          { kind: "activity", value: "Entering audit phase — inspecting diff" },
+          { kind: "playbook", value: "Audit Pass 1/2 · Structure", detail: "Loaded structure guidance" },
+          { kind: "playbook", value: "Audit Pass 2/2 · Security", detail: "Loaded security guidance" },
+        ],
+      }
+
+      const result = formatTranscript(session, [message], {
+        thinking: false,
+        toolDetails: false,
+        assistantMetadata: false,
+      })
+
+      expect(result).toContain("_[OCX] Audit_")
+      expect(result.indexOf("Audit Pass 1/2 · Structure")).toBeLessThan(result.indexOf("Audit Pass 2/2 · Security"))
+      expect(result).toContain("Loaded structure guidance")
+      expect(result).toContain("Loaded security guidance")
     })
   })
 })

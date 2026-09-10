@@ -1,0 +1,19 @@
+---
+name: complexity-redflags
+description: Keep structure small, explicit, and directed toward one responsibility per module.
+signals: complexity, abstraction, structure, refactor, duplicate, circular, module
+globs: **/*.ts, **/*.tsx, **/*.py, **/*.go, **/*.rs, **/*.java, **/*.kt
+sources: https://martinfowler.com/bliki/ArchitectureDecisionRecord.html | 2026-08-28
+---
+## Rules
+- Prefer one clear owner for state, policy, resource lifetime, and transformation.
+- Extract a repeated block only when the boundary names a real reusable concept.
+- Remove dead code and empty scaffolds instead of preserving them for later.
+- Keep dependencies directed inward and reject cycles between changed modules.
+- Record an architectural decision when a boundary changes future extension cost.
+
+## Example
+If two files share a rule, move the rule to a leaf module and test the boundary instead of copying it.
+
+## Sources
+- https://martinfowler.com/bliki/ArchitectureDecisionRecord.html (2026-08-28)

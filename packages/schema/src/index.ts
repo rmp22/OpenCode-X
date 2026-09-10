@@ -25,4 +25,11 @@ export { Question } from "./question"
 export { Workspace } from "./workspace"
 export { Prompt, Source, FileAttachment, AgentAttachment } from "./prompt"
 export { PromptInput } from "./prompt-input"
+export {
+  SessionActivity,
+  ActivityType,
+  ActivityStatus,
+  ActivityStep,
+  validateSessionActivity,
+} from "./session-activity"
 export * from "./schema"

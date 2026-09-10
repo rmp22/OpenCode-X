@@ -34,6 +34,10 @@ import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
+export function effectiveContextLimit(context: number, configured?: number): number {
+  return configured ?? context
+}
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -1225,7 +1229,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     options: {},
     cost: cost(model.cost),
     limit: {
-      context: model.limit.context,
+      context: effectiveContextLimit(model.limit.context),
       input: model.limit.input,
       output: model.limit.output,
     },
@@ -1649,6 +1653,11 @@ const layer = Layer.effect(
                 (v) => omit(v, ["disabled"]),
               )
             }
+
+            model.limit.context = effectiveContextLimit(
+              model.limit.context,
+              configProvider?.models?.[modelID]?.limit?.context,
+            )
           }
 
           if (Object.keys(provider.models).length === 0) {

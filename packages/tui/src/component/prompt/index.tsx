@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { formatWorkflowIndicator } from "../../ocx/text"
 
 registerOpencodeSpinner()
 
@@ -289,6 +290,18 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  const ocxActivity = createMemo(() => {
+    if (!props.sessionID) return undefined
+    if (sync.data.session_status[props.sessionID]?.type === "idle") return undefined
+    const current = sync.data.session_activity[props.sessionID]
+    return current?.state === "active" ? current : undefined
+  })
+
+  const ocxWorkflow = createMemo(() => {
+    if (!props.sessionID) return undefined
+    return sync.data.session_workflow[props.sessionID]
+  })
+
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
@@ -327,15 +340,16 @@ export function Prompt(props: PromptProps) {
 
       syncedSessionID = sessionID
 
-      // Only set agent if it's a primary agent (not a subagent)
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
-        // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
         if (msg.model) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
         }
+      } else if (!msg.agent && !args.agent) {
+        const defaultAgent = local.agent.list()[0]?.name ?? "build"
+        local.agent.set(defaultAgent)
       }
     }
   })
@@ -1310,6 +1324,10 @@ export function Prompt(props: PromptProps) {
 
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const workflowMeta = createMemo(() => {
+    if (!props.sessionID) return undefined
+    return sync.data.session_workflow?.[props.sessionID]
+  })
   const variantMetaAlpha = createFadeIn(
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
@@ -1456,7 +1474,31 @@ export function Prompt(props: PromptProps) {
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>· auto</text>
+                      </Show>
+                      <Show when={workflowMeta()}>
+                        {(meta) => {
+                          const indicator = formatWorkflowIndicator({
+                            workflow: meta().workflow,
+                            phase: meta().phase,
+                            variant: meta().variant,
+                            operation: meta().operation,
+                          })
+                          const fgColor =
+                            indicator.level === "success"
+                              ? theme.success
+                              : indicator.level === "warning"
+                                ? theme.warning
+                                : theme.secondary
+                          return (
+                            <box flexDirection="row" gap={1}>
+                              <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>·</text>
+                              <text fg={fadeColor(fgColor, agentMetaAlpha())}>
+                                {`${indicator.icon} ${indicator.label}`}
+                              </text>
+                            </box>
+                          )
+                        }}
                       </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
@@ -1651,8 +1693,46 @@ export function Prompt(props: PromptProps) {
             <Match when={true}>
               {props.hint ?? (
                 <Show when={props.sessionID}>
-                  <box marginLeft={1}>
-                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
+                  <box marginLeft={1} flexDirection="row" gap={1} alignItems="center" flexShrink={1}>
+                    <Show when={ocxActivity()}>
+                      {(act) => (
+                        <box flexDirection="row" gap={1} alignItems="center">
+                          <Spinner color={theme.warning}>{act().title?.trim() || "Working"}</Spinner>
+                          <Show when={act().ownerType === "owner" && act().ownerID}>
+                            <text fg={theme.secondary}>✦ {act().ownerID}</text>
+                          </Show>
+                          <Show when={act().progressCurrent !== undefined && act().progressTotal !== undefined}>
+                            <text fg={theme.textMuted}>· {act().progressCurrent}/{act().progressTotal}</text>
+                          </Show>
+                          <Show when={act().detail && act().detail !== act().title}>
+                            <text fg={theme.textMuted} wrapMode="none">· {act().detail}</text>
+                          </Show>
+                          <text fg={theme.textMuted}>·</text>
+                        </box>
+                      )}
+                    </Show>
+                    <Show when={!ocxActivity() && ocxWorkflow()}>
+                      {(wf) => {
+                        const indicator = formatWorkflowIndicator({
+                          workflow: wf().workflow,
+                          phase: wf().phase,
+                          variant: wf().variant,
+                        })
+                        const fgColor =
+                          indicator.level === "success"
+                            ? theme.success
+                            : indicator.level === "warning"
+                              ? theme.warning
+                              : theme.primary
+                        return (
+                          <box flexDirection="row" gap={1} alignItems="center">
+                            <text fg={fgColor}>{indicator.icon} {indicator.label}</text>
+                            <text fg={theme.textMuted}>·</text>
+                          </box>
+                        )
+                      }}
+                    </Show>
+                    <text fg={theme.textMuted} wrapMode="none">{location()?.directory ?? paths.cwd}</text>
                   </box>
                 </Show>
               )}

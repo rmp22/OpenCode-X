@@ -14,6 +14,7 @@ import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
+import { TodoCommand } from "./cli/cmd/todo"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
@@ -29,6 +30,7 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { ContextCommand } from "./cli/cmd/context"
 
 const args = hideBin(process.argv)
 
@@ -87,6 +89,7 @@ const cli = yargs(args)
   .command(DebugCommand)
   .command(ConsoleCommand)
   .command(ProvidersCommand)
+  .command(TodoCommand)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)
@@ -101,6 +104,7 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(ContextCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

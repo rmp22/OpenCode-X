@@ -1,0 +1,72 @@
+=== CODE STRUCTURE STANDARD ===
+
+Apply these standards only when architecture or code organization materially needs
+a deliberate structure decision. It is guidance, not a prerequisite for writing
+code and never an execution-plan step. For small, local, or already-structured
+changes, follow the repository's existing shape instead of inventing a pattern.
+
+PATTERNS (choose by problem shape, not habit)
+- Hexagonal / ports-and-adapters (Cockburn): core logic behind interfaces;
+  frameworks, databases, and UI sit at the edges. Use when dependency isolation
+  or replaceable adapters are real requirements.
+- Vertical slices: one folder per feature containing its route, logic, and
+  store access. Use when feature-local ownership is clearer than layer folders.
+- Functional core, imperative shell: parse inputs at the edge, decide in pure
+  functions, perform effects at the edge. Use when branching logic benefits from
+  deterministic, easily tested decisions.
+- Modular monolith: strict module boundaries in one deployable; modules talk
+  through exported APIs only. Use when the codebase already has meaningful
+  modules or the task introduces durable domain boundaries.
+- Event sourcing / CQRS: only when audit trails or replay are requirements.
+- ECS (entity-component-system): only for simulations and games.
+
+RULES THAT APPLY EVERYWHERE
+- Code reads without comments. If a comment feels needed, rename or
+  restructure instead. Tooling pragmas (eslint-disable, noqa) are exempt.
+- Clean imports over inline FQNs: never use inline fully qualified names
+  (e.g. java.util.List, android.util.Log, org.springframework.http.ResponseEntity)
+  in code bodies in Java, Kotlin, etc. Import the type at the top of the file
+  and use simple names. If resolving a collision, use import aliases in languages
+  supporting them (e.g. Kotlin); inline FQNs are only permitted as an unavoidable
+  last resort in Java when collisions cannot be aliased.
+- One responsibility per module; one reason to change per file.
+- No god objects or god classes. If a class exceeds 15 methods or a file
+  crosses 300-400 lines while holding multiple concerns, split into focused
+  collaborators by domain responsibility, not arbitrary line slicing.
+- Centralized constants (all languages): never scatter raw magic numbers or
+  repeated string literals across functions. Define a dedicated Constants
+  class, namespace, or module (`constants.ts`, `constants.py`, `constants.go`,
+  `Constants.java`, `constants.rs`) for immutable, typed constants for
+  statuses, configuration limits, event types, and domain boundaries.
+- Anti-spaghetti & flat flow: early returns and guard clauses over nested
+  else pyramids (keep block nesting < 4). Extract complex branching into
+  lookup tables or pure predicate functions.
+- Dependency direction points inward: edges depend on core, never the reverse.
+- Reuse before write: search the module for an existing helper, type, or
+  pattern before adding a second one. Two blocks that differ by one value
+  become one function with a parameter. Copy-pasted logic is debt that
+  multiplies bugs and test surface.
+- Write the failure path with the happy path. Every parse, network call,
+  file read, or cast gets its error branch in the same edit, with typed
+  errors at boundaries. Code that only works when nothing goes wrong is
+  unfinished.
+- Record design rationale where the structure lives: the file plan names why
+  each boundary exists, so the next editor inherits the decision instead of
+  reverse-engineering it. A layout without a stated reason reads as
+  disposable.
+- No magic values. Repeated or meaningful literals become named constants or
+  string enums at one source of truth. Status and type discriminators come
+  from that source, never from inline literals.
+- Composition over inheritance. Small pure functions over class hierarchies.
+- Fail loudly at boundaries: validate inputs, return typed errors, never
+  swallow failures silently.
+- Delete code instead of commenting it out. Dead code is a lie.
+- Naming: simple English, short common words, no coined compounds or hype.
+  The name says what it does; the code shows how.
+- Verification beats promises: prefer checks that cannot false-positive
+  (tests, types, execution). When judgment must decide, require exact quoted
+  evidence before acting on it.
+- Tests must fail when the behavior they cover breaks. A test that cannot
+  fail verifies nothing.
+
+=== END CODE STRUCTURE STANDARD ===

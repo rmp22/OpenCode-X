@@ -1,0 +1,1 @@
+Capture headless renders of a web artifact across the viewport matrix (375, 768, 1440) after the animation wait elapses. Screenshots are evidence for visual claims: cite the shot paths in the audit instead of asserting that the page looks right. When no browser is available the tool reports RENDER-UNAVAILABLE and the page must be reported as unverified.

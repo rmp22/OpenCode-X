@@ -1,0 +1,19 @@
+---
+name: google-api-design
+description: Resource-oriented API architecture, standard methods, pagination, and canonical errors.
+signals: api, rest, grpc, endpoint, route, http, pagination, resource
+globs: **/api/**, **/routes/**, **/server/**, **/client/**, **/service/**
+sources:
+- https://google.aip.dev | 2026-09-01
+---
+## Rules
+- Resource-Oriented Design: Structure URLs around collections and resources (e.g. /v1/publishers/{publisher}/books/{book}).
+- Standard HTTP Methods: Use GET for Get/List, POST for Create, PATCH for Update, DELETE for Delete.
+- Custom Methods: Use ':customVerb' suffix (e.g. POST /v1/documents/123:archive) when operations do not map to standard methods.
+- Pagination: All list endpoints must accept 'page_size' (integer) and 'page_token' (string), returning 'next_page_token'. Never use unbounded queries.
+- Partial Updates: Update methods must support FieldMask ('update_mask') rather than overwriting entire resources.
+- Canonical Status Codes: Use standard status codes (NotFound, InvalidArgument, PermissionDenied, AlreadyExists) with structured error models.
+- Naming Conventions: snake_case in protocol buffers, camelCase in JSON representations, UPPER_SNAKE_CASE in enum values.
+
+## Sources
+- https://google.aip.dev (2026-09-01)

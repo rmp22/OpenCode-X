@@ -34,6 +34,7 @@ import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
+import { Todo } from "./todo"
 import { LLM } from "./llm"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "@/tool/shell/id"
@@ -56,9 +57,36 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
-import { PhaseGuard } from "@/tool/phase-guard"
+import { OCXWorkflowEvent } from "@opencode-ai/schema/ocx-workflow-event"
+import { ActivityRuntime } from "@/ocx/activity/runtime"
+import { BuildGuard } from "@/ocx/build-guard"
+import { MutationGuard } from "@/ocx/mutation-guard"
+import { OCXDb } from "@/ocx/ocx-db"
+import { HeaderTool } from "@/ocx/turn/header-tool"
+import { Gate } from "@/ocx/turn/gate"
+import { OCXPipeline } from "@/ocx/ocx-pipeline"
+import { OperationClassifier } from "@/ocx/operation-classifier"
+import { PathConstraint } from "@/ocx/scope/path-constraint"
+import { PlaybookQueue } from "@/ocx/playbook/queue"
+import { PlaybookRunner } from "@/ocx/playbook/runner"
+import { PromptGovernor } from "@/ocx/prompt-governor"
+import { PromptTools } from "@/ocx/prompt-tools"
+import { ReasoningControl } from "@/ocx/reasoning/control"
+import { ShellPolicy } from "@/ocx/shell-policy"
+import { VerifyLadder } from "@/ocx/verify-ladder"
+import { WorkflowV2 } from "@/ocx/workflow-v2"
+import { declaresDone, declaresNeedsInput } from "@/ocx/session-done"
+import { Claim } from "@/ocx/turn/claim"
+import { Frame } from "@/ocx/turn/frame"
+import type { Stage } from "@/ocx/turn/types"
+import { State } from "@/ocx/turn/state"
+import { BeforeStep } from "@/ocx/turn/before-step"
+import type { PromptBlock } from "@/ocx/prompt-governor"
+import { AttentionCoordinator } from "@/ocx/attention/coordinator"
+import { containsPath } from "../project/instance-context"
+import { SystemContext } from "@opencode-ai/core/system-context"
+import { OCXSystemContext } from "@/system-context/ocx"
 
-// @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 const decodeMessageInfo = Schema.decodeUnknownExit(SessionV1.Info)
@@ -71,6 +99,21 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/png",
   "image/webp",
 ])
+
+function promptBlock(
+  source: PromptBlock["source"],
+  content: string,
+  id: string,
+  trimPolicy?: PromptBlock["trimPolicy"],
+): PromptBlock {
+  return {
+    source,
+    content,
+    id,
+    tokens: Math.ceil(content.length / 4),
+    ...(trimPolicy ? { trimPolicy } : {}),
+  }
+}
 
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
 
@@ -95,9 +138,17 @@ function formatMcpResourceBytes(value: number) {
 }
 
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
-  // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
-  // They are not pending work and must not trigger an assistant-prefill request.
   return part.state.status === "error" && part.state.metadata?.interrupted === true
+}
+
+const MAX_TODO_NUDGES = 2
+
+function todoNudgeText(open: readonly Todo.Info[], doneDeclared = false) {
+  const items = open.map((item) => `- [${item.status}] ${item.content}`).join("\n")
+  const prefix = doneDeclared
+    ? "OCX todo guard: You declared STATE: done, but the session todo list still has open items:\n"
+    : "OCX todo guard: the todo list still has open items:\n"
+  return `${prefix}${items}\nBefore stopping, use the todowrite tool to mark finished items completed, cancel stale ones, or keep working on the next item. Do not end with a stale list.`
 }
 
 export interface Interface {
@@ -140,6 +191,7 @@ const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const todo = yield* Todo.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -148,6 +200,123 @@ const layer = Layer.effect(
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
       } satisfies TaskPromptOps
+    })
+
+    const guardShell = Effect.fn("SessionPrompt.guardShell")(function* (input: {
+      readonly sessionID: SessionID
+      readonly parentSessionID?: string
+      readonly cwd: string
+      readonly command: string
+      readonly applyRepositoryPolicy?: boolean
+      readonly store?: OCXDb.Store
+    }) {
+      const store = input.store ?? (yield* OCXDb.shared.pipe(Effect.catch(() => Effect.succeed(OCXDb.memory()))))
+      if (flags.ocxPipeline) {
+        const auth = WorkflowV2.Gate.guardAction({
+          operation: "command.run",
+          sessionID: input.sessionID,
+          command: input.command,
+        })
+        if (!auth.allowed) throw new Error(auth.reason ?? `Workflow blocked: command disallowed`)
+      }
+      if (input.applyRepositoryPolicy !== false) {
+        const shellRule = ShellPolicy.check(input.command, input.cwd)
+        if (shellRule) throw new Error(`${shellRule.rule}: ${shellRule.message}`)
+      }
+    })
+
+    const runVerificationCommand = Effect.fn("SessionPrompt.runVerificationCommand")(function* (input: {
+      readonly sessionID: SessionID
+      readonly messageID: MessageID
+      readonly agent: Agent.Info
+      readonly session: Session.Info
+      readonly messages: readonly SessionV1.WithParts[]
+      readonly store: OCXDb.Store
+      readonly command: string
+      readonly cwd: string
+      readonly timeoutMs: number
+      readonly kind: VerifyLadder.RunCommandInput["kind"]
+    }) {
+      yield* guardShell({
+        sessionID: input.sessionID,
+        cwd: input.cwd,
+        command: input.command,
+        store: input.store,
+      })
+
+      const instance = yield* InstanceState.context
+      const constraints = PathConstraint.fromMessages(input.messages, instance.directory)
+      const executionDecision = PathConstraint.authorize(constraints, "execute", input.cwd)
+      if (executionDecision && !executionDecision.allowed)
+        throw new Error(PathConstraint.renderBlocked(executionDecision))
+      const readTargets = ShellPolicy.readTargets(input.command, input.cwd)
+      const readDecision = PathConstraint.firstBlockedRead(constraints, readTargets)
+      if (readDecision) throw new Error(PathConstraint.renderBlocked(readDecision))
+
+      const externalDirectories = [
+        ...new Set(readTargets.filter((target) => !containsPath(target, instance)).map((target) => path.dirname(target))),
+      ]
+      if (externalDirectories.length > 0) {
+        const patterns = externalDirectories.map((directory) =>
+          process.platform === "win32" ? FSUtil.normalizePathPattern(path.join(directory, "*")) : path.join(directory, "*"),
+        )
+        yield* permission.ask({
+          permission: "external_directory",
+          patterns,
+          always: patterns,
+          metadata: {
+            command: input.command,
+            directories: externalDirectories,
+            reason: "verification command reads outside the working directory",
+          },
+          sessionID: input.sessionID,
+          tool: { messageID: input.messageID, callID: `ocx-verify-${input.kind}` },
+          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+        })
+      }
+
+      const buildDecision = BuildGuard.classifyCommand(input.command)
+      if (buildDecision.requiresPermission)
+        yield* permission.ask({
+          permission: buildDecision.permission,
+          patterns: [input.command],
+          always: [],
+          metadata: {
+            command: input.command,
+            reason: "verification command requires explicit user approval",
+            detail: buildDecision.reason,
+            kind: buildDecision.kind,
+            destructive: buildDecision.destructive,
+          },
+          sessionID: input.sessionID,
+          tool: { messageID: input.messageID, callID: `ocx-verify-${input.kind}` },
+          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+        })
+
+      const cfg = yield* config.get()
+      const shell = Shell.acceptable(cfg.shell)
+      const startedAt = Date.now()
+      const abort = new AbortController()
+      const timer = setTimeout(() => abort.abort(), input.timeoutMs)
+      const result = yield* Effect.promise(() =>
+        Process.text([input.command], {
+          cwd: input.cwd,
+          shell,
+          abort: abort.signal,
+          nothrow: true,
+        }),
+      ).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            clearTimeout(timer)
+            abort.abort()
+          }),
+        ),
+      )
+      return {
+        outcome: result.code === 0 ? ("passed" as const) : ("failed" as const),
+        durationMs: Date.now() - startedAt,
+      }
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
@@ -204,7 +373,6 @@ const layer = Layer.effect(
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
       const idx = input.history.findIndex(real)
       if (idx === -1) return
-      if (input.history.filter(real).length !== 1) return
 
       const context = input.history.slice(0, idx + 1)
       const firstUser = context[idx]
@@ -218,12 +386,11 @@ const layer = Layer.effect(
       if (!ag) return
       const mdl = ag.model
         ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
-        : ((yield* provider.getSmallModel(input.providerID)) ??
-          (yield* provider.getModel(input.providerID, input.modelID)))
+        : yield* provider.getModel(input.providerID, input.modelID)
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
-      const text = yield* llm
+      const streamed = yield* llm
         .stream({
           agent: ag,
           user: firstInfo,
@@ -239,19 +406,36 @@ const layer = Layer.effect(
           Stream.filter(LLMEvent.is.textDelta),
           Stream.map((e) => e.text),
           Stream.mkString,
-          Effect.orDie,
+          Effect.exit,
         )
-      const cleaned = text
-        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+      const text = Exit.isSuccess(streamed) ? streamed.value : undefined
+      const found = text
+        ?.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
-      if (!cleaned) return
-      const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      const cleaned = found === undefined ? undefined : capTitle(found)
+      const t = cleaned ?? titleFromParts(firstUser.parts)
+      if (!t) return
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
         .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
+
+    const capTitle = (line: string) => (line.length > 100 ? line.substring(0, 97) + "..." : line)
+
+    function titleFromParts(parts: SessionV1.Part[]) {
+      const text = parts.find(
+        (p): p is SessionV1.TextPart => p.type === "text" && !("synthetic" in p && p.synthetic),
+      )?.text
+      if (!text) return undefined
+      const line = text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((candidate) => candidate.trim())
+        .find((candidate) => candidate.length > 0)
+      return line ? capTitle(line.replace(/\s+/g, " ").trim()) : undefined
+    }
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
       task: SessionV1.SubtaskPart
@@ -263,6 +447,11 @@ const layer = Layer.effect(
     }) {
       const { task, model, lastUser, sessionID, session, msgs } = input
       const ctx = yield* InstanceState.context
+      const store = yield* OCXDb.shared.pipe(Effect.catch(() => Effect.succeed(OCXDb.memory())))
+      if (flags.ocxPipeline) {
+        const auth = WorkflowV2.Gate.guardTool({ toolName: TaskTool.id, sessionID })
+        if (!auth.allowed) throw new Error(auth.renderedFailure ?? auth.reason ?? `Workflow blocked: tool ${TaskTool.id} disallowed`)
+      }
       const promptOps = yield* ops()
       const { task: taskTool } = yield* registry.named()
       const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
@@ -456,6 +645,13 @@ const layer = Layer.effect(
           const { msg, part, cwd } = yield* Effect.gen(function* () {
             const ctx = yield* InstanceState.context
             const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+            yield* guardShell({
+              sessionID: input.sessionID,
+              parentSessionID: session.parentID,
+              cwd: ctx.directory,
+              command: input.command,
+              applyRepositoryPolicy: false,
+            })
             if (session.revert) {
               yield* revert.cleanup(session)
             }
@@ -1084,7 +1280,18 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let todoNudges = 0
+        let todoNudge: Todo.Info[] | undefined
+        let todoDoneDeclared = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+        const ocxStore = yield* OCXDb.shared.pipe(Effect.catch(() => Effect.succeed(OCXDb.memory())))
+        const strongReviewer = flags.ocxStrongReviewer ? Provider.parseModel(flags.ocxStrongReviewer) : undefined
+        const strongReviewerModel = strongReviewer
+          ? yield* provider
+              .getModel(strongReviewer.providerID, strongReviewer.modelID)
+              .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          : undefined
+        let ocxContextSnapshot: SystemContext.Snapshot | undefined
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1096,14 +1303,77 @@ const layer = Layer.effect(
 
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
+          let pipeline: OCXPipeline.Result | undefined
+          let ocxSystemCache: { userID: string; phase: string; parts: PromptBlock[] } | undefined
+          const ocx = () => ({
+            store: ocxStore,
+            todoGet: (sid: string) =>
+              Effect.map(todo.get(SessionID.make(sid)), (items) =>
+                items.map((item) => ({ content: item.content, status: item.status, priority: item.priority })),
+              ),
+            todoSet: (sid: string, items: ReadonlyArray<{ content: string; status: string; priority: string }>) =>
+              todo.update({ sessionID: SessionID.make(sid), todos: [...items] }).pipe(Effect.ignore),
+            llm,
+            model,
+            user: lastUser as SessionV1.User,
+            sessionID,
+            cwd: ctx.directory,
+            contextEnabled: flags.contextEnabled,
+            contextAgentRetrieval: flags.contextAgentRetrieval,
+            contextFreshnessChecks: flags.contextFreshnessChecks,
+            ocxVerifyLadder: flags.ocxVerifyLadder,
+            ocxWorkGraph: flags.ocxWorkGraph,
+            ocxReviewEnvelope: flags.ocxReviewEnvelope,
+            ocxFlakeGate: flags.ocxFlakeGate,
+            ocxPractices: flags.ocxPractices,
+            ocxPatchSelection: flags.ocxPatchSelection,
+            verify: (input: { readonly changed: readonly string[]; readonly cwd: string }) =>
+              VerifyLadder.runVerifyLadderEffect({
+                ...input,
+                exec: (command) =>
+                  runVerificationCommand({
+                    ...command,
+                    sessionID,
+                    messageID: msg.id,
+                    agent,
+                    session,
+                    messages: msgs,
+                    store: ocxStore,
+                  }).pipe(
+                    Effect.catch(() =>
+                      Effect.succeed({ outcome: "skipped" as const, durationMs: 0 }),
+                    ),
+                  ),
+              }),
+            ...(strongReviewerModel ? { reviewerModel: strongReviewerModel } : {}),
+            publishActivity: (stage: Stage, active: boolean, summary?: string) =>
+              ActivityRuntime.publishStage({ sessionID, stage, active, ...(summary ? { summary } : {}) }, events),
+            publishWorkflow: (workflow: {
+              workflow: string
+              phase: string
+              phases: ReadonlyArray<{ readonly id: string; readonly goal: string }>
+            }) =>
+              events
+                .publish(OCXWorkflowEvent.Updated, { sessionID, ...workflow, phases: [...workflow.phases] })
+                .pipe(Effect.ignore),
+            updatePart: (part: SessionV1.Part) => sessions.updatePart(part as never).pipe(Effect.asVoid),
+          })
+
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
-          // Some providers return "stop" even when the assistant message contains
-          // tool calls. Keep the loop running so tool results can be sent back to
-          // the model, but ignore cleanup-marked interrupted orphans.
+          const hasFinishedAssistant =
+            !!lastAssistant?.finish && !["tool-calls", "unknown"].includes(lastAssistant.finish)
+          const hasNeedsInput =
+            hasFinishedAssistant &&
+            lastUser.id < lastAssistant.id &&
+            (lastAssistantMsg?.parts.some((part) => part.type === "text" && declaresNeedsInput(part.text)) ?? false)
+          if (hasNeedsInput) {
+            yield* Effect.logInfo("exiting loop after needs_input", { "session.id": sessionID })
+            break
+          }
           const hasToolCalls =
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
@@ -1115,19 +1385,53 @@ const layer = Layer.effect(
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
-            const orphan = lastAssistantMsg?.parts.find(
-              (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+            const open = (yield* todo
+              .get(sessionID)
+              .pipe(Effect.catch(() => Effect.succeed([] as Todo.Info[])))).filter(
+              (item) => item.status === "pending" || item.status === "in_progress",
             )
-            if (orphan) {
-              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
-                "session.id": sessionID,
-                messageID: lastAssistant.id,
-                tool: orphan.tool,
-                callID: orphan.callID,
-              })
+            const doneDeclared = lastAssistantMsg
+              ? lastAssistantMsg.parts.some((part) => part.type === "text" && declaresDone(part.text))
+              : false
+            if (
+              open.length > 0 &&
+              todoNudges < MAX_TODO_NUDGES &&
+              !doneDeclared &&
+              !(lastAssistantMsg && "error" in lastAssistantMsg.info && lastAssistantMsg.info.error != null)
+            ) {
+              todoNudges++
+              todoNudge = open
+              todoDoneDeclared = doneDeclared
+            } else {
+              if (doneDeclared && open.length > 0) {
+                const allTodos = yield* todo
+                  .get(sessionID)
+                  .pipe(Effect.catch(() => Effect.succeed([] as Todo.Info[])))
+                yield* todo
+                  .update({
+                    sessionID,
+                    todos: allTodos.map((item) =>
+                      item.status === "pending" || item.status === "in_progress"
+                        ? { ...item, status: "completed" as const }
+                        : item,
+                    ),
+                  })
+                  .pipe(Effect.ignore)
+              }
+              const orphan = lastAssistantMsg?.parts.find(
+                (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+              )
+              if (orphan) {
+                yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+                  "session.id": sessionID,
+                  messageID: lastAssistant.id,
+                  tool: orphan.tool,
+                  callID: orphan.callID,
+                })
+              }
+              yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+              break
             }
-            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-            break
           }
 
           step++
@@ -1140,6 +1444,12 @@ const layer = Layer.effect(
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+
+          if (flags.ocxPipeline)
+            pipeline = yield* Frame.begin(ocx(), msgs, lastUser.id).pipe(
+              Effect.catchCause(() => Effect.succeed(undefined)),
+            )
+
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
@@ -1176,14 +1486,27 @@ const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
+          const activePass = PlaybookQueue.activePass(sessionID)
+          const activePassContext =
+            activePass && (activePass.stage === "post_implementation" || activePass.stage === "verification")
+              ? PlaybookRunner.nextPassContext(sessionID)
+              : undefined
+          const activeTopic = activePassContext
+            ? `Playbook Pass ${activePassContext.order}/${activePassContext.total} · ${activePassContext.displayName}`
+            : undefined
+          const topic = activeTopic ?? pipeline?.topic
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
-          msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
-            Effect.provideService(RuntimeFlags.Service, flags),
-            Effect.provideService(FSUtil.Service, fsys),
-            Effect.provideService(Session.Service, sessions),
-          )
-
+          const wasPlan = msgs.some((message) => message.info.role === "assistant" && message.info.agent === "plan")
+          const reminderKey = `${State.turnKey(sessionID, lastUser.id)}:${agent.name}:${wasPlan ? "after-plan" : "current"}`
+          if (!State.isReminderInjected(reminderKey)) {
+            msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
+              Effect.provideService(RuntimeFlags.Service, flags),
+              Effect.provideService(FSUtil.Service, fsys),
+              Effect.provideService(Session.Service, sessions),
+            )
+            State.markReminderInjected(reminderKey)
+          }
           const msg: SessionV1.Assistant = {
             id: MessageID.ascending(),
             parentID: lastUser.id,
@@ -1201,28 +1524,63 @@ const layer = Layer.effect(
           }
           yield* sessions.updateMessage(msg)
 
-          const finalizeInterruptedAssistant = Effect.gen(function* () {
-            if (msg.time.completed) return
-            msg.error ??= MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-              providerID: msg.providerID,
-              aborted: true,
-            })
-            msg.time.completed = Date.now()
-            yield* sessions.updateMessage(msg)
+          const settlePlaybook = Effect.fnUntraced(function* (
+            outcome: "completed" | "failed" | "skipped" | "cancelled",
+            reason?: string,
+          ) {
+            const active = PlaybookQueue.activePass(sessionID)
+            if (!active) return
+            PlaybookQueue.completePass(sessionID, active.passID, outcome, reason)
+            PlaybookRunner.persist({ store: ocxStore, sessionID })
+            yield* ActivityRuntime.publishStage({ sessionID, stage: "thinking", active: false }, events)
           })
 
-          const handle = yield* processor
-            .create({
-              assistantMessage: msg,
-              sessionID,
-              model,
-            })
-            .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
+          const finalizeInterruptedAssistant = Effect.gen(function* () {
+            if (!msg.time.completed) {
+              msg.error ??= MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
+                providerID: msg.providerID,
+                aborted: true,
+              })
+              msg.time.completed = Date.now()
+              yield* sessions.updateMessage(msg)
+            }
+            yield* settlePlaybook("cancelled", "assistant processing interrupted")
+          })
+
+          const created = yield* Effect.exit(
+            processor
+              .create({
+                assistantMessage: msg,
+                sessionID,
+                model,
+                topic,
+                ...(flags.ocxPipeline ? { request: OCXPipeline.promptText(msgs) ?? undefined } : {}),
+              })
+              .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant)),
+          )
+          if (Exit.isFailure(created)) {
+            yield* settlePlaybook(
+              Cause.hasInterruptsOnly(created.cause) ? "cancelled" : "failed",
+              Cause.pretty(created.cause),
+            )
+            return yield* Effect.failCause(created.cause)
+          }
+          const handle = created.value
 
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
             const promptOps = yield* ops()
+            const mutationContext = MutationGuard.fromMessages(msgs)
+            if (!mutationContext.workflow && pipeline?.workflow.name)
+              MutationGuard.recordWorkflow(mutationContext, pipeline.workflow.name)
+            const workflow =
+              flags.ocxPipeline && pipeline
+                ? WorkflowV2.Gate.current({ sessionID })
+                : undefined
+            const currentWorkflow = workflow
+              ? () => WorkflowV2.Gate.current({ sessionID })
+              : undefined
 
             const tools = yield* SessionTools.resolve({
               agent,
@@ -1232,6 +1590,14 @@ const layer = Layer.effect(
               bypassAgentCheck,
               messages: msgs,
               promptOps,
+              mutationContext,
+              planStore: ocxStore,
+              ...(workflow ? { workflow } : {}),
+              ...(currentWorkflow ? { currentWorkflow } : {}),
+              publishWorkflow: (wf: any) =>
+                events
+                  .publish(OCXWorkflowEvent.Updated, { sessionID, ...wf, phases: [...(wf?.phases ?? [])] })
+                  .pipe(Effect.ignore),
             }).pipe(
               Effect.provideService(Plugin.Service, plugin),
               Effect.provideService(Permission.Service, permission),
@@ -1241,6 +1607,15 @@ const layer = Layer.effect(
               Effect.provideService(RuntimeFlags.Service, flags),
             )
 
+            if (flags.ocxPipeline && pipeline)
+              Gate.apply(Frame.headerOpen(ocx(), lastUser.id) && step < 4, step, tools, {
+                workflow: (currentWorkflow?.() as any)?.workflow ?? (workflow as any)?.workflow ?? mutationContext.workflow,
+                phase: (currentWorkflow?.() as any)?.phase ?? (workflow as any)?.phase,
+                phases: (currentWorkflow?.() as any)?.phases ?? (workflow as any)?.phases,
+                messages: msgs,
+                planAccepted: ocxStore.get(sessionID)?.plan !== undefined,
+              })
+
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
                 schema: lastUser.format.schema,
@@ -1249,62 +1624,237 @@ const layer = Layer.effect(
                 },
               })
             }
+            PromptTools.install({
+              tools,
+              sessionID,
+                messages: msgs,
+                workflow: pipeline?.workflow.name,
+                operation: OperationClassifier.classifyRequest(OCXPipeline.promptText(msgs) ?? ""),
+                pipelineEnabled: flags.ocxPipeline,
+              practicesEnabled: flags.ocxPractices,
+              turnDone: Frame.isDone(ocx()),
+              workdir: ctx.directory,
+              store: ocxStore,
+            })
+            const headerTool = Frame.isDone(ocx())
+              ? undefined
+              : HeaderTool.ifOpen(
+                  ocx(),
+                  lastUser.id,
+                  pipeline?.workflow.name,
+                  pipeline?.workflow.phases ?? [],
+                  mutationContext,
+                  ocx().store,
+                )
+            if (headerTool) tools["ocx_header"] = headerTool
 
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+            const userPromptText = (lastUserMsg?.parts ?? [])
+              .filter((p): p is Extract<SessionV1.Part, { type: "text" }> => p.type === "text")
+              .map((p) => p.text)
+              .join("\n")
+
+            const attentionCoord = AttentionCoordinator.coordinate({
+              messages: msgs,
+              userQuery: userPromptText,
+              globalObjective: userPromptText,
+            })
+
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
-              sys.environment({ model, variant: lastUser.model.variant }),
+              sys.environment({ model, variant: lastUser.model.variant, sessionID }),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              MessageV2.toModelMessagesEffect(msgs, model, { attentionMask: attentionCoord.attentionMask }),
             ])
-            const system = [
-              ...env,
-              ...instructions,
-              ...(mcpInstructions ? [mcpInstructions] : []),
-              ...(skills ? [skills] : []),
+            const systemBlocks: PromptBlock[] = [
+              ...env.map((content, index) => promptBlock("core", content, `environment:${index}`, "never")),
+              ...instructions.map((content, index) =>
+                promptBlock("hard_constraint", content, `instructions:${index}`, "never"),
+              ),
+              ...(mcpInstructions ? [promptBlock("optional_knowledge", mcpInstructions, "mcp-instructions")] : []),
+              ...(skills ? [promptBlock("optional_knowledge", skills, "skills")] : []),
             ]
+            if (attentionCoord.dualFocusAnchor) {
+              systemBlocks.push(promptBlock("hard_constraint", attentionCoord.dualFocusAnchor, "dual-focus-anchor", "never"))
+            }
+            if (attentionCoord.segments.length > 0) {
+              systemBlocks.push(promptBlock("core", attentionCoord.segmentDirectory, "attention-segment-directory", "never"))
+            }
+            if (pipeline && (ocxSystemCache?.userID !== lastUser.id || ocxSystemCache.phase !== pipeline.workflow.phase)) {
+              ocxSystemCache = {
+                userID: lastUser.id,
+                phase: pipeline.workflow.phase,
+                parts: [
+                  ...OCXPipeline.directiveBlocks(pipeline, {
+                    includeBodies: false,
+                    includeCatalog: pipeline.workflow.phase === "plan",
+                  }),
+                ],
+              }
+            }
+            if (ocxSystemCache) systemBlocks.push(...ocxSystemCache.parts)
+            if (flags.ocxPipeline) {
+              const steerResult = WorkflowV2.Lanes.steerWithPrompt(sessionID, userPromptText, model.id)
+              const agentTuning = WorkflowV2.Tuning.tuneSessionAgent({
+                modelId: model.id,
+                sessionID,
+                lane: steerResult.lane.risk,
+              })
+              const capabilityBlock = WorkflowV2.Gate.renderPromptContext({
+                sessionID,
+                lane: steerResult.lane.kind,
+                risk: steerResult.lane.risk,
+                pipelineId: steerResult.analysis.pipelineId,
+                analysis: steerResult.analysis,
+                tuning: agentTuning,
+              })
+              if (capabilityBlock)
+                systemBlocks.push(promptBlock("hard_constraint", capabilityBlock, "workflow-agentic", "never"))
+            }
+            if (pipeline) {
+              const context = yield* OCXSystemContext.render({
+                store: ocxStore,
+                sessionID,
+                repositoryID: ctx.worktree,
+                ...(ocxContextSnapshot ? { snapshot: ocxContextSnapshot } : {}),
+              }).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+              if (context) {
+                ocxContextSnapshot = context.snapshot
+                if (context.text) systemBlocks.push(promptBlock("context", context.text, "context-system"))
+              }
+            }
+            const { deltas, feedback } = flags.ocxPipeline
+              ? yield* BeforeStep.run(ocx(), msgs, lastUser.id).pipe(
+                  Effect.catchCause(() => Effect.succeed({ deltas: [] as string[], feedback: undefined })),
+                )
+              : { deltas: [] as string[], feedback: undefined }
+            systemBlocks.push(
+              ...deltas.map((content, index) =>
+                content.includes("=== OCX AUDIT PASS") || content.includes("=== OCX PLAYBOOK PASS")
+                  ? promptBlock("playbook", content, `playbook-pass:${index}`, "bounded")
+                  : promptBlock("current_step", content, `before-step:${index}`),
+              ),
+            )
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            const result = yield* handle.process({
-              user: lastUser,
-              agent,
-              permission: session.permission,
-              sessionID,
-              parentSessionID: session.parentID,
-              system,
-              messages: [
-                ...modelMsgs,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
-              ],
-              tools,
-              model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
-            })
+            if (format.type === "json_schema")
+              systemBlocks.push(
+                promptBlock("hard_constraint", STRUCTURED_OUTPUT_SYSTEM_PROMPT, "structured-output", "never"),
+              )
+            if (flags.ocxPipeline) {
+              const hasFailure =
+                feedback !== undefined || deltas.some((d) => d.includes("failure") || d.includes("Recovery"))
+              const workflowPhase = (currentWorkflow?.() as any)?.phase ?? pipeline?.workflow.phase
+              const profile = hasFailure
+                ? "recovery"
+                : workflowPhase === "verify" || workflowPhase === "fullcheck"
+                  ? "deep"
+                  : "normal"
+              const control = ReasoningControl.build({ profile, hasFailure, workflowPhase })
+              if (control && !systemBlocks.some((block) => block.content.includes("OCX REASONING CONTROL")))
+                systemBlocks.push(promptBlock("reasoning_control", control, "reasoning-control", "never"))
+            }
+            let system = systemBlocks.map((block) => block.content)
+            if (flags.ocxPipeline) {
+              const governor = new PromptGovernor(8000)
+              const governed = governor.govern(systemBlocks)
+              system = governed.admitted.map((block) => block.content)
+            }
+            const nudge = todoNudge
+            const nudgeDone = todoDoneDeclared
+            todoNudge = undefined
+            todoDoneDeclared = false
+            const gateFeedback = feedback
+            const processed = yield* Effect.exit(
+              handle.process({
+                user: lastUser,
+                agent,
+                permission: session.permission,
+                sessionID,
+                parentSessionID: session.parentID,
+                system,
+                messages: [
+                  ...modelMsgs,
+                  ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+                  ...(nudge ? [{ role: "user" as const, content: todoNudgeText(nudge, nudgeDone) }] : []),
+                  ...(gateFeedback ? [{ role: "user" as const, content: gateFeedback }] : []),
+                ],
+                tools,
+                ...(workflow ? { workflow } : {}),
+                ...(currentWorkflow ? { currentWorkflow } : {}),
+                workflowStore: ocxStore,
+                publishWorkflow: (state) =>
+                  events
+                    .publish(OCXWorkflowEvent.Updated, {
+                      sessionID,
+                      workflow: state.workflow,
+                      phase: state.phase,
+                      phases: [...state.phases],
+                      ...(state.variant ? { variant: state.variant } : {}),
+                      ...(state.objective ? { objective: state.objective } : {}),
+                      ...(state.status ? { status: state.status } : {}),
+                      ...(state.revision !== undefined ? { revision: state.revision } : {}),
+                      ...(state.intentRevision !== undefined ? { intentRevision: state.intentRevision } : {}),
+                    })
+                    .pipe(Effect.ignore),
+                model,
+                toolChoice: format.type === "json_schema" ? "required" : undefined,
+              }),
+            )
+            if (Exit.isFailure(processed)) {
+              yield* settlePlaybook(
+                Cause.hasInterruptsOnly(processed.cause) ? "cancelled" : "failed",
+                Cause.pretty(processed.cause),
+              )
+              return yield* Effect.failCause(processed.cause)
+            }
+            const result = processed.value
+            if (handle.message.error) yield* settlePlaybook("failed", JSON.stringify(handle.message.error))
+
+            const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+            let passFailed = false
+            if (finished) {
+              const responseParts = yield* MessageV2.parts(handle.message.id).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              passFailed = responseParts.some((part) => part.type === "tool" && part.state.status === "error")
+              if (!flags.ocxPipeline) {
+                if (responseParts.some((part) => part.type === "text" && declaresNeedsInput(part.text))) {
+                  yield* Effect.logInfo("exiting loop after needs_input", { "session.id": sessionID })
+                  yield* settlePlaybook("skipped", "assistant requested user input")
+                  return "break" as const
+                }
+                if (responseParts.some((part) => part.type === "text" && declaresDone(part.text))) {
+                  yield* Effect.logInfo("exiting loop after declares_done", { "session.id": sessionID })
+                  yield* settlePlaybook(passFailed ? "failed" : "completed")
+                  return "break" as const
+                }
+              }
+            }
 
             if (structured !== undefined) {
               handle.message.structured = structured
               handle.message.finish = handle.message.finish ?? "stop"
               yield* sessions.updateMessage(handle.message)
+              yield* settlePlaybook(
+                passFailed ? "failed" : "completed",
+                passFailed ? "a pass-owned tool failed" : undefined,
+              )
               return "break" as const
             }
 
-            const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
             if (finished && !handle.message.error) {
-              // Surface any content-filter finish (e.g. Anthropic stop_reason:
-              // refusal) as an error. These turns may have produced no visible
-              // output at all — previously the session went idle silently — or
-              // partial text that was cut off by the provider's filter.
               if (handle.message.finish === "content-filter") {
                 handle.message.error = new SessionV1.ContentFilterError({
                   message: "The response was blocked by the provider's content filter",
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                yield* settlePlaybook("failed", "provider content filter rejected the response")
                 return "break" as const
               }
               if (format.type === "json_schema") {
@@ -1313,15 +1863,34 @@ const layer = Layer.effect(
                   retries: 0,
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
+                yield* settlePlaybook("failed", "structured output was not produced")
                 return "break" as const
               }
+
+              if (flags.ocxPipeline) {
+                yield* settlePlaybook(
+                  passFailed ? "failed" : "completed",
+                  passFailed ? "a pass-owned tool failed" : undefined,
+                )
+                msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+                  Effect.provideService(Database.Service, database),
+                )
+                const gate = yield* Claim.run(ocx(), msgs, lastUser.id)
+                if (gate.continueTurn) return "continue" as const
+                const refreshed = MessageV2.latest(msgs)
+                if (refreshed.user && refreshed.user.id !== lastUser.id) return "continue" as const
+              }
+              const finishedParts = yield* MessageV2.parts(handle.message.id).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              if (finishedParts.some((part) => part.type === "tool")) return "continue" as const
+              return "break" as const
             }
 
             if (result === "stop") {
-              if (!PhaseGuard.requireCompletion(sessionID)) return "break" as const
-              handle.message.finish = undefined
-              yield* sessions.updateMessage(handle.message)
-              return "continue" as const
+              if (!handle.message.error)
+                yield* settlePlaybook("failed", "assistant processing stopped before a terminal pass result")
+              return "break" as const
             }
             if (result === "compact") {
               yield* compaction.create({
@@ -1349,7 +1918,11 @@ const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      return yield* state.ensureRunning(
+        input.sessionID,
+        lastAssistant(input.sessionID),
+        runLoop(input.sessionID).pipe(Effect.ensuring(Effect.sync(() => State.clearTransient(input.sessionID)))),
+      )
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
@@ -1402,6 +1975,14 @@ const layer = Layer.effect(
 
       const shellMatches = ConfigMarkdown.shell(template)
       if (shellMatches.length > 0) {
+        const ctx = yield* InstanceState.context
+        for (const [, command] of shellMatches)
+          yield* guardShell({
+            sessionID: input.sessionID,
+            cwd: ctx.directory,
+            command,
+            applyRepositoryPolicy: flags.ocxPipeline,
+          })
         const cfg = yield* config.get()
         const sh = Shell.preferred(cfg.shell)
         const results = yield* Effect.promise(() =>
@@ -1547,9 +2128,6 @@ export const CommandInput = Schema.Struct({
   arguments: Schema.String,
   command: Schema.String,
   variant: Schema.optional(Schema.String),
-  // Inlined (no identifier annotation) to keep the original SDK output — the
-  // PromptInput call site below references FilePartInput by ref via the
-  // Schema export in message-v2.ts.
   parts: Schema.optional(
     Schema.Array(
       Schema.Union([
@@ -1567,19 +2145,16 @@ export const CommandInput = Schema.Struct({
 })
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
 
-/** @internal Exported for testing */
 export function createStructuredOutputTool(input: {
   schema: Record<string, any>
   onSuccess: (output: unknown) => void
 }): AITool {
-  // Remove $schema property if present (not needed for tool input)
   const { $schema: _, ...toolSchema } = input.schema
 
   return tool({
     description: STRUCTURED_OUTPUT_DESCRIPTION,
     inputSchema: jsonSchema(toolSchema as JSONSchema7),
     async execute(args) {
-      // AI SDK validates args against inputSchema before calling execute()
       input.onSuccess(args)
       return {
         output: "Structured output captured successfully.",
@@ -1596,7 +2171,6 @@ export function createStructuredOutputTool(input: {
   })
 }
 const bashRegex = /!`([^`]+)`/g
-// Match [Image N] as single token, quoted strings, or non-space sequences
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
@@ -1631,6 +2205,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    Todo.node,
   ],
 })
 

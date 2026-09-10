@@ -15,6 +15,9 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import * as Tool from "../../src/tool/tool"
 import { testEffect } from "../lib/effect"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import { OCXDb } from "../../src/ocx/ocx-db"
+import { OCXEdit } from "../../src/ocx/ocx-edit"
+import type { SessionV1 } from "@opencode-ai/core/v1/session"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),
@@ -90,6 +93,155 @@ const onceBus = Effect.fn("EditToolTest.onceBus")(function* (def: typeof Watcher
 })
 
 describe("tool.edit", () => {
+  it.instance("records a failed patch without changing its error channel", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const sessionID = SessionID.make(`ses_patch_recovery_${Date.now()}`)
+      const filepath = path.join(test.directory, "existing-recovery.txt")
+      yield* put(filepath, "existing content")
+
+      const tool = yield* init()
+      const next = { ...ctx, sessionID }
+      const exit = yield* OCXEdit.runEdit(
+        { filePath: filepath, oldString: "", newString: "replacement" },
+        next,
+        (resolved) => tool.execute(resolved as Tool.InferParameters<typeof EditTool>, next),
+      ).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+
+      const store = yield* OCXDb.shared
+      const record = store.operations(sessionID).find((item) => item.operation === "patch")
+      expect(record?.status).toBe("failed")
+      expect(record?.category).toBe("artifact")
+      expect(record?.message).toContain("oldString cannot be empty")
+    }),
+  )
+
+  it.instance("heals whitespace drift through the OCX edit hook", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "hook-heal.txt")
+      yield* put(filepath, "\tint x = 1;\n\t\tint y = 2;\n")
+
+      const tool = yield* init()
+      const result = yield* OCXEdit.runEdit(
+        { filePath: filepath, oldString: "    int x = 1;\n        int y = 2;", newString: "replaced" },
+        ctx,
+        (resolved) => tool.execute(resolved as Tool.InferParameters<typeof EditTool>, ctx),
+      )
+
+      expect(result.output).toContain("Edit applied successfully")
+      expect(yield* load(filepath)).toBe("replaced\n")
+    }),
+  )
+
+  it.instance("passes malformed edit args through to upstream validation", () =>
+    Effect.gen(function* () {
+      const tool = yield* init()
+      const exit = yield* OCXEdit.runEdit(null as unknown as Record<string, unknown>, ctx, (resolved) =>
+        tool.execute(resolved as Tool.InferParameters<typeof EditTool>, ctx),
+      ).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).not.toBeInstanceOf(TypeError)
+      }
+    }),
+  )
+
+  it.instance("passes drifted replaceAll through to upstream substring semantics", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "hook-replaceall.txt")
+      yield* put(filepath, "foo bar foo")
+
+      const tool = yield* init()
+      const result = yield* OCXEdit.runEdit(
+        { filePath: filepath, oldString: "  foo", newString: "qux", replaceAll: true },
+        ctx,
+        (resolved) => tool.execute(resolved as Tool.InferParameters<typeof EditTool>, ctx),
+      )
+
+      expect(result.output).toContain("Edit applied successfully")
+      expect(yield* load(filepath)).toBe("qux bar qux")
+    }),
+  )
+
+  it.instance("rehints with fresh pointers when upstream reports a stale miss", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "hook-rehint.txt")
+      yield* put(filepath, "alpha\nbeta\ngamma\n")
+
+      const exit = yield* OCXEdit.runEdit(
+        { filePath: filepath, oldString: "beta", newString: "changed" },
+        ctx,
+        () => Effect.fail(new Error("Could not find oldString in the file (simulated stale read)")),
+      ).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const message = String(Cause.squash(exit.cause))
+        expect(message).toContain("first-line matches 1x (first at line 2)")
+        expect(message).toContain("fix:")
+      }
+      expect(yield* load(filepath)).toBe("alpha\nbeta\ngamma\n")
+    }),
+  )
+
+  it.instance("passes non-miss failures through without rehinting", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "hook-passthrough.txt")
+      yield* put(filepath, "content\n")
+
+      const exit = yield* OCXEdit.runEdit(
+        { filePath: filepath, oldString: "content", newString: "changed" },
+        ctx,
+        () => Effect.fail(new Error("permission denied (simulated)")),
+      ).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const message = String(Cause.squash(exit.cause))
+        expect(message).toContain("permission denied")
+        expect(message).not.toContain("first-line")
+      }
+    }),
+  )
+
+  it.instance("blocks edits outside a user-scoped working directory", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const outside = path.join(path.dirname(test.directory), `outside-scope-${Date.now()}.txt`)
+      yield* put(outside, "outside content")
+
+      yield* Effect.acquireUseRelease(
+        Effect.void,
+        () =>
+          Effect.gen(function* () {
+            const tool = yield* init()
+            const scopedMessages = [
+              {
+                info: { role: "user", id: "user-scope", time: { created: 1 } },
+                parts: [{ type: "text", text: "Do not write anything outside the working directory." }],
+              },
+            ] as unknown as SessionV1.WithParts[]
+            const next = { ...ctx, messages: scopedMessages }
+            const exit = yield* OCXEdit.runEdit(
+              { filePath: outside, oldString: "outside content", newString: "changed" },
+              next,
+              (resolved) => tool.execute(resolved as Tool.InferParameters<typeof EditTool>, next),
+            ).pipe(Effect.exit)
+            expect(Exit.isFailure(exit)).toBe(true)
+            if (Exit.isFailure(exit)) {
+              const err = Cause.squash(exit.cause)
+              expect(String(err instanceof Error ? err.message : err)).toContain("SCOPE_BLOCKED")
+            }
+            expect(yield* Effect.promise(() => fs.readFile(outside, "utf-8"))).toBe("outside content")
+          }),
+        () => Effect.promise(() => fs.unlink(outside).catch(() => undefined)).pipe(Effect.ignore),
+      )
+    }),
+  )
+
   describe("creating new files", () => {
     it.instance("creates new file when oldString is empty", () =>
       Effect.gen(function* () {

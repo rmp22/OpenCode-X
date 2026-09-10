@@ -1,0 +1,4 @@
+Use the `ocx_context` tool for deliberate, structured repository exploration.
+Call it with operation `explore` and the requested scope below. Reuse its stored context first, follow its bounded mapper scope, and report evidence, confidence, freshness, and remaining unknowns. Do not replace this with an unbounded repository-root search.
+
+Requested scope: $ARGUMENTS

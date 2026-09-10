@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Option, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -12,8 +12,18 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { BuildGuard } from "@/ocx/build-guard"
+import { Codebase } from "@/ocx/codebase/service"
+import { CodebaseSearch } from "@/ocx/codebase/search"
+import { GitGuard } from "@/ocx/git-guard"
+import { OperationClassifier } from "@/ocx/operation-classifier"
+import { PathConstraint } from "@/ocx/scope/path-constraint"
+import { ScopePermit } from "@/ocx/scope-permit"
+import { ShellPolicy } from "@/ocx/shell-policy"
+import { WorkflowV2 } from "@/ocx/workflow-v2"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "./shell/id"
+import { Git } from "@/git"
 
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
@@ -23,6 +33,16 @@ import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
 
 export { Parameters } from "./shell/prompt"
+export { fileMutationViaInterpreter } from "@/ocx/shell-policy"
+
+function userIntentText(ctx: Tool.Context): string {
+  return ctx.messages
+    .filter((message) => message.info.role === "user")
+    .flatMap((message) => message.parts)
+    .filter((part): part is Extract<(typeof ctx.messages)[number]["parts"][number], { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+}
 
 const MAX_METADATA_LENGTH = 30_000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
@@ -64,7 +84,6 @@ const CMD_FILES = new Set([
 ])
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
-
 type Part = {
   type: string
   text: string
@@ -344,6 +363,8 @@ export const ShellTool = Tool.define(
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
+    const git = Option.getOrUndefined(yield* Effect.serviceOption(Git.Service))
+    const codebase = Option.getOrUndefined(yield* Effect.serviceOption(Codebase.Service))
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
@@ -612,10 +633,82 @@ export const ShellTool = Tool.define(
               const cwd = params.workdir
                 ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)
                 : instanceCtx.directory
+              const constraints = PathConstraint.fromMessages(ctx.messages, instanceCtx.directory)
+              const executionDecision = PathConstraint.authorize(constraints, "execute", cwd)
+              if (executionDecision && !executionDecision.allowed)
+                throw new Error(PathConstraint.renderBlocked(executionDecision))
+              const readDecision = PathConstraint.firstBlockedRead(constraints, ShellPolicy.readTargets(params.command, cwd))
+              if (readDecision) throw new Error(PathConstraint.renderBlocked(readDecision))
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
-              const timeout = params.timeout ?? defaultTimeoutMs
+              const classification = ShellPolicy.classifyEffects(params.command)
+              const operation = OperationClassifier.classifyOperation(
+                { name: "shell", input: { command: params.command } },
+                { cwd, repositoryRoot: instanceCtx.worktree },
+              )
+              const auth = WorkflowV2.Gate.guardAction({
+                operation: "command.run",
+                sessionID: ctx.sessionID,
+                command: params.command,
+              })
+              if (!auth.allowed) throw new Error(auth.reason ?? `Workflow blocked: command disallowed`)
+              const shellRule = ShellPolicy.check(params.command, cwd)
+              if (shellRule) throw new Error(`${shellRule.rule}: ${shellRule.message}`)
+              const buildDecision = BuildGuard.classifyCommand(params.command)
+              if (buildDecision.requiresPermission)
+                yield* ctx.ask({
+                  permission: buildDecision.permission,
+                  patterns: [params.command],
+                  always: [],
+                  metadata: {
+                    command: params.command,
+                    reason: "build-backed command requires explicit user approval",
+                    detail: buildDecision.reason,
+                    kind: buildDecision.kind,
+                    destructive: buildDecision.destructive,
+                  },
+                })
+
+              const gitCommand = GitGuard.classify(params.command)
+              const workspaceKnown = instanceCtx.project.vcs === "git" && instanceCtx.worktree !== "/"
+              const workspaceEntries =
+                workspaceKnown && git
+                  ? yield* git.status(instanceCtx.worktree).pipe(Effect.catch(() => Effect.succeed([])))
+                  : []
+              const gitDecision = GitGuard.evaluate(gitCommand, {
+                known: workspaceKnown,
+                entries: workspaceEntries,
+              })
+              if (gitDecision?.action === "BLOCK")
+                throw new Error(`${gitDecision.reason}. ${gitDecision.recommendation}`)
+              if (gitDecision)
+                yield* ctx.ask({
+                  permission: gitDecision.permission,
+                  patterns: [params.command],
+                  always: [],
+                  metadata: {
+                    command: params.command,
+                    reason: gitDecision.reason,
+                    recommendation: gitDecision.recommendation,
+                    workspaceEntries: workspaceEntries.map((entry) => entry.file).slice(0, 32),
+                  },
+                })
+
+              const searchDecision = codebase
+                ? yield* codebase
+                    .guardShell({
+                      command: params.command,
+                      cwd,
+                      explicitRepositoryWide: explicitRepositoryWide(ctx),
+                    })
+                    .pipe(Effect.orDie)
+                : undefined
+              if (searchDecision && searchDecision.action !== "ALLOW" && searchDecision.action !== "ALLOW_WITH_BUDGET")
+                throw new Error(CodebaseSearch.renderBlocked(searchDecision))
+              const timeout = searchDecision
+                ? Math.min(params.timeout ?? defaultTimeoutMs, searchDecision.budget.hardTimeoutMs)
+                : (params.timeout ?? defaultTimeoutMs)
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
@@ -643,3 +736,11 @@ export const ShellTool = Tool.define(
       })
   }),
 )
+
+function explicitRepositoryWide(ctx: Tool.Context): boolean {
+  return ctx.messages.some(
+    (message) =>
+      message.info.role === "user" &&
+      message.parts.some((part) => part.type === "text" && CodebaseSearch.explicitFullSearch(part.text)),
+  )
+}

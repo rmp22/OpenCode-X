@@ -184,7 +184,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       list,
       visible: agentsVisible,
       current() {
-        return pickAgent(agentsVisible() ? (scope()?.agent ?? store.current) : "build")
+        const selected = scope()?.agent ?? store.current
+        const item = pickAgent(selected)
+        if (item?.mode === "subagent") {
+          const session = id()
+          if (!session || saved.session[session]?.agent !== item.name) {
+            return pickAgent(store.current !== item.name ? store.current : "build")
+          }
+        }
+        return pickAgent(agentsVisible() ? selected : "build")
       },
       set(name: string | undefined) {
         const item = pickAgent(name)
@@ -194,13 +202,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
 
         batch(() => {
-          setStore("current", item.name)
-          setStore("last", {
-            type: "agent",
-            agent: item.name,
-            model: item.model,
-            variant: item.variant ?? null,
-          })
+          if (item.mode !== "subagent") {
+            setStore("current", item.name)
+            setStore("last", {
+              type: "agent",
+              agent: item.name,
+              model: item.model,
+              variant: item.variant ?? null,
+            })
+          }
           const prev = scope()
           const next = {
             agent: item.name,

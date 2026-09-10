@@ -73,7 +73,14 @@ import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
-import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import {
+  isRawThinking,
+  nextThinkingMode,
+  reasoningTitle,
+  reasoningSummary,
+  useThinkingMode,
+  type ThinkingMode,
+} from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
@@ -82,6 +89,17 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import {
+  cleanInputArgs,
+  formatOcxTool,
+  parseDeliveryHeader,
+  strategyLabel,
+  stripPhaseMarkers,
+} from "../../ocx/text"
+import { DeliveryHeader } from "../../ocx/delivery-header"
+import { PrimaryActivityRow } from "../../ocx/activity-row"
+import { OcxMilestones } from "../../ocx/workflow-rows"
+import { groupByMessage } from "../../ocx/ocx-log"
 
 addDefaultParsers(parsers.parsers)
 
@@ -154,7 +172,7 @@ const sessionGlobalBindingCommands = [
 
 const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] as const
 
-const context = createContext<{
+export const SessionContext = createContext<{
   width: number
   sessionID: string
   conceal: () => boolean
@@ -170,7 +188,7 @@ const context = createContext<{
 }>()
 
 function use() {
-  const ctx = useContext(context)
+  const ctx = useContext(SessionContext)
   if (!ctx) throw new Error("useContext must be used within a Session component")
   return ctx
 }
@@ -211,6 +229,11 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const ocxLog = createMemo(() => sync.data.session_ocx_log?.[route.sessionID] ?? [])
+  const ocxEntriesByMessage = createMemo(() => groupByMessage(messages(), ocxLog()))
+  // Indicator rows attach only to the newest message so a multi-message turn
+  // shows one transient status line, never one sticky line per boundary.
+  const lastMessageId = createMemo(() => messages().at(-1)?.id)
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -243,6 +266,24 @@ export function Session() {
 
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant")
+  })
+
+  const hasFinalVerdict = (msgId: string) => {
+    const parts = sync.data.part[msgId] ?? []
+    return parts.some(
+      (p) =>
+        p.type === "text" &&
+        (/\bSTATE:\s*(?:done|needs_input|blocked)\b/i.test(p.text) ||
+          /(?:^|\n)STATE:\s*(?:done|needs_input|blocked)/i.test(p.text)),
+    )
+  }
+
+  const isSessionComplete = createMemo(() => {
+    const last = lastAssistant()
+    if (!last) return false
+    if (hasFinalVerdict(last.id)) return true
+    const isIdle = sync.data.session_status[route.sessionID]?.type === "idle"
+    return isIdle && last.time.completed !== undefined
   })
 
   const dimensions = useTerminalDimensions()
@@ -924,7 +965,11 @@ export function Session() {
           const sessionMessages = messages()
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            sessionMessages.map((msg) => ({
+              info: msg,
+              parts: sync.data.part[msg.id] ?? [],
+              ocxEntries: ocxEntriesByMessage().groups.get(msg.id),
+            })),
             {
               thinking: showThinking(),
               toolDetails: showDetails(),
@@ -968,12 +1013,17 @@ export function Session() {
 
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            sessionMessages.map((msg) => ({
+              info: msg,
+              parts: sync.data.part[msg.id] ?? [],
+              ocxEntries: ocxEntriesByMessage().groups.get(msg.id),
+            })),
             {
               thinking: options.thinking,
               toolDetails: options.toolDetails,
               assistantMetadata: options.assistantMetadata,
               providers: sync.data.provider,
+              leadingOcxEntries: ocxEntriesByMessage().leading,
             },
           )
 
@@ -1144,7 +1194,7 @@ export function Session() {
 
   return (
     <LocationProvider location={location()}>
-      <context.Provider
+      <SessionContext.Provider
         value={{
           get width() {
             return contentWidth()
@@ -1186,98 +1236,108 @@ export function Session() {
                 <box height={1} />
                 <For each={messages()}>
                   {(message, index) => (
-                    <Switch>
-                      <Match when={message.id === revert()?.messageID}>
-                        {(function () {
-                          const redoShortcut = useCommandShortcut("session.redo")
-                          const [hover, setHover] = createSignal(false)
-                          const dialog = useDialog()
+                    <>
+                      <Switch>
+                        <Match when={message.id === revert()?.messageID}>
+                          {(function () {
+                            const redoShortcut = useCommandShortcut("session.redo")
+                            const [hover, setHover] = createSignal(false)
+                            const dialog = useDialog()
 
-                          const handleUnrevert = async () => {
-                            const confirmed = await DialogConfirm.show(
-                              dialog,
-                              "Confirm Redo",
-                              "Are you sure you want to restore the reverted messages?",
-                            )
-                            if (confirmed) {
-                              keymap.dispatchCommand("session.redo")
+                            const handleUnrevert = async () => {
+                              const confirmed = await DialogConfirm.show(
+                                dialog,
+                                "Confirm Redo",
+                                "Are you sure you want to restore the reverted messages?",
+                              )
+                              if (confirmed) {
+                                keymap.dispatchCommand("session.redo")
+                              }
                             }
-                          }
 
-                          return (
-                            <box
-                              onMouseOver={() => setHover(true)}
-                              onMouseOut={() => setHover(false)}
-                              onMouseUp={handleUnrevert}
-                              marginTop={1}
-                              flexShrink={0}
-                              border={["left"]}
-                              customBorderChars={SplitBorder.customBorderChars}
-                              borderColor={theme.backgroundPanel}
-                            >
+                            return (
                               <box
-                                paddingTop={1}
-                                paddingBottom={1}
-                                paddingLeft={2}
-                                backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                                onMouseOver={() => setHover(true)}
+                                onMouseOut={() => setHover(false)}
+                                onMouseUp={handleUnrevert}
+                                marginTop={1}
+                                flexShrink={0}
+                                border={["left"]}
+                                customBorderChars={SplitBorder.customBorderChars}
+                                borderColor={theme.backgroundPanel}
                               >
-                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                                <text fg={theme.textMuted}>
-                                  <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
-                                </text>
-                                <Show when={revert()!.diffFiles?.length}>
-                                  <box marginTop={1}>
-                                    <For each={revert()!.diffFiles}>
-                                      {(file) => (
-                                        <text fg={theme.text}>
-                                          {file.filename}
-                                          <Show when={file.additions > 0}>
-                                            <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
-                                          </Show>
-                                          <Show when={file.deletions > 0}>
-                                            <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
-                                          </Show>
-                                        </text>
-                                      )}
-                                    </For>
-                                  </box>
-                                </Show>
+                                <box
+                                  paddingTop={1}
+                                  paddingBottom={1}
+                                  paddingLeft={2}
+                                  backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                                >
+                                  <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                                  <text fg={theme.textMuted}>
+                                    <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
+                                  </text>
+                                  <Show when={revert()!.diffFiles?.length}>
+                                    <box marginTop={1}>
+                                      <For each={revert()!.diffFiles}>
+                                        {(file) => (
+                                          <text fg={theme.text}>
+                                            {file.filename}
+                                            <Show when={file.additions > 0}>
+                                              <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                            </Show>
+                                            <Show when={file.deletions > 0}>
+                                              <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                            </Show>
+                                          </text>
+                                        )}
+                                      </For>
+                                    </box>
+                                  </Show>
+                                </box>
                               </box>
-                            </box>
-                          )
-                        })()}
-                      </Match>
-                      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                        <></>
-                      </Match>
-                      <Match when={message.role === "user"}>
-                        <UserMessage
-                          index={index()}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            dialog.replace(() => (
-                              <DialogMessage
-                                messageID={message.id}
-                                sessionID={route.sessionID}
-                                setPrompt={(promptInfo) => prompt?.set(promptInfo)}
-                              />
-                            ))
-                          }}
-                          message={message as UserMessage}
-                          parts={sync.data.part[message.id] ?? []}
-                          pending={pending()}
-                        />
-                      </Match>
-                      <Match when={message.role === "assistant"}>
-                        <AssistantMessage
-                          last={lastAssistant()?.id === message.id}
-                          message={message as AssistantMessage}
-                          parts={sync.data.part[message.id] ?? []}
-                        />
-                      </Match>
-                    </Switch>
+                            )
+                          })()}
+                        </Match>
+                        <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                          <></>
+                        </Match>
+                        <Match when={message.role === "user"}>
+                          <UserMessage
+                            index={index()}
+                            onMouseUp={() => {
+                              if (renderer.getSelection()?.getSelectedText()) return
+                              dialog.replace(() => (
+                                <DialogMessage
+                                  messageID={message.id}
+                                  sessionID={route.sessionID}
+                                  setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                                />
+                              ))
+                            }}
+                            message={message as UserMessage}
+                            parts={sync.data.part[message.id] ?? []}
+                            pending={pending()}
+                          />
+                        </Match>
+                        <Match when={message.role === "assistant"}>
+                          <AssistantMessage
+                            last={lastAssistant()?.id === message.id}
+                            message={message as AssistantMessage}
+                            parts={sync.data.part[message.id] ?? []}
+                          />
+                          <Show when={!isSessionComplete() && ocxEntriesByMessage().groups.get(message.id)}>
+                            {(entries) => (
+                              <OcxMilestones sessionID={route.sessionID} entries={entries()} />
+                            )}
+                          </Show>
+                        </Match>
+                      </Switch>
+                    </>
                   )}
                 </For>
+                <Show when={!isSessionComplete()}>
+                  <PrimaryActivityRow sessionID={route.sessionID} />
+                </Show>
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
@@ -1342,7 +1402,7 @@ export function Session() {
             </Switch>
           </Show>
         </box>
-      </context.Provider>
+      </SessionContext.Provider>
     </LocationProvider>
   )
 }
@@ -1475,8 +1535,33 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
+  const hasPartVerdict = createMemo(() => {
+    return props.parts.some((p) => p.type === "text" && parseDeliveryHeader((p as TextPart).text) !== undefined)
+  })
+
+  const fallbackVerdict = createMemo(() => {
+    if (hasPartVerdict() || !final()) return undefined
+    const wf = sync.data.session_workflow[props.message.sessionID]
+    const isIdle = sync.data.session_status[props.message.sessionID]?.type === "idle"
+    if (wf?.status === "complete" || (isIdle && props.message.time.completed !== undefined && props.last)) {
+      return {
+        phase: wf?.phase || "deliver",
+        depth: "comprehensive",
+        state: "done",
+      }
+    }
+    return undefined
+  })
+
   return (
     <>
+      <Show when={fallbackVerdict()}>
+        {(v) => (
+          <box paddingLeft={3} marginTop={1} flexShrink={0}>
+            <DeliveryHeader verdict={v()} />
+          </box>
+        )}
+      </Show>
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
@@ -1577,18 +1662,27 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const [expanded, setExpanded] = createSignal(false)
 
   const content = createMemo(() => {
-    // OpenRouter encrypts some reasoning blocks; drop the placeholder.
     return props.part.text.replace("[REDACTED]", "").trim()
   })
-  // Reasoning is finalized when the server sets `time.end` (see processor.ts).
-  // Flips independently of the parent message completing.
   const isDone = createMemo(() => props.part.time.end !== undefined)
+  const raw = createMemo(() => isRawThinking(props.part.metadata))
+  const hidden = createMemo(() => (props.part.metadata as any)?.ocx?.display === false)
   const inMinimal = createMemo(() => ctx.thinkingMode() === "hide")
   const duration = createMemo(() => {
     const end = props.part.time.end
     return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
   })
   const summary = createMemo(() => reasoningSummary(content()))
+  const title = createMemo(() => reasoningTitle(content(), props.part.metadata))
+  const firstLine = createMemo(() => content().split("\n").map((line) => line.trim()).find(Boolean))
+  // Keep the first valid topic so a later provider summary cannot rename this
+  // reasoning part while it changes from Thinking to Thought.
+  const [keptTitle, setKeptTitle] = createSignal<string | null>(null)
+  createEffect(() => {
+    const value = title()
+    if (value && keptTitle() === null) setKeptTitle(value)
+  })
+  const headerTitle = createMemo(() => keptTitle() ?? title())
   const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
 
   const toggle = () => {
@@ -1597,7 +1691,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   }
 
   return (
-    <Show when={content()}>
+    <Show when={!hidden() && !!content()}>
       <box
         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         paddingLeft={3}
@@ -1610,22 +1704,29 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
             toggleable={inMinimal()}
             open={!inMinimal() || expanded()}
             done={isDone()}
-            title={summary().title}
+            title={isDone() ? headerTitle() : null}
             duration={isDone() ? Locale.duration(duration()) : undefined}
           />
         </box>
-        <Show when={(!inMinimal() || expanded()) && summary().body}>
+        <Show when={!raw() && (!inMinimal() || expanded()) && summary().body}>
           <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
-              content={summary().body}
+              content={content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
           </box>
+        </Show>
+        <Show when={isDone() && inMinimal() && !expanded() && firstLine()}>
+          {(line) => (
+            <text paddingLeft={2} marginTop={1} fg={theme.textMuted}>
+              {line()}
+            </text>
+          )}
         </Show>
       </box>
     </Show>
@@ -1678,22 +1779,45 @@ function ReasoningHeader(props: {
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
+  const sync = useSync()
   const { theme, syntax } = useTheme()
+  const verdict = createMemo(() => parseDeliveryHeader(props.part.text))
+  const previousThoughtTitle = createMemo(() => {
+    const parts = sync.data.part[props.message.id] ?? []
+    const idx = parts.indexOf(props.part as any)
+    for (let i = (idx === -1 ? parts.length - 1 : idx - 1); i >= 0; i--) {
+      const p = parts[i]
+      if (p.type === "reasoning" && (p as any).title) {
+        return (p as any).title as string
+      }
+    }
+    return undefined
+  })
+  const body = createMemo(() => stripPhaseMarkers(props.part.text, { previousThoughtTitle: previousThoughtTitle() }))
   return (
-    <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <markdown
-          syntaxStyle={syntax()}
-          streaming={true}
-          internalBlockMode="top-level"
-          content={props.part.text.trim()}
-          tableOptions={{ style: "grid" }}
-          conceal={ctx.conceal()}
-          fg={theme.markdownText}
-          bg={theme.background}
-        />
-      </box>
-    </Show>
+    <>
+      <Show when={verdict()}>
+        {(v) => (
+          <box paddingLeft={3} marginTop={1} flexShrink={0}>
+            <DeliveryHeader verdict={v()} />
+          </box>
+        )}
+      </Show>
+      <Show when={!!body().trim()}>
+        <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+          <markdown
+            syntaxStyle={syntax()}
+            streaming={true}
+            internalBlockMode="top-level"
+            content={body().trim()}
+            tableOptions={{ style: "grid" }}
+            conceal={ctx.conceal()}
+            fg={theme.markdownText}
+            bg={theme.background}
+          />
+        </box>
+      </Show>
+    </>
   )
 }
 
@@ -1705,6 +1829,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
+    if (props.part.tool === "ocx_progress") return true
     if (ctx.showDetails()) return false
     if (props.part.state.status !== "completed") return false
     return true
@@ -1731,6 +1856,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
+        <Match when={props.part.tool.startsWith("ocx_") || props.part.tool === "plan"}>
+          <OcxTool {...toolprops} />
+        </Match>
         <Match when={display() === "bash"}>
           <Shell {...toolprops} />
         </Match>
@@ -1754,12 +1882,6 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         </Match>
         <Match when={display() === "structure"}>
           <StructureTool {...toolprops} />
-        </Match>
-        <Match when={display() === "audit"}>
-          <AuditTool {...toolprops} />
-        </Match>
-        <Match when={display() === "design"}>
-          <DesignTool {...toolprops} />
         </Match>
         <Match when={display() === "write"}>
           <Write {...toolprops} />
@@ -1793,13 +1915,49 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   )
 }
 
-type ToolProps = {
+export type ToolProps = {
   input: Record<string, unknown>
   metadata: Record<string, unknown>
   tool: string
   output?: string
   part: ToolPart
 }
+
+export function OcxTool(props: ToolProps) {
+  const { theme } = useTheme()
+  const info = createMemo(() => formatOcxTool(props.tool, props.input))
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const isFailed = createMemo(() => props.part.state.status === "error")
+  const isCompleted = createMemo(() => props.part.state.status === "completed")
+
+  return (
+    <>
+      <InlineTool
+        icon={info().icon}
+        iconColor={theme.secondary}
+        pending={info().title}
+        complete={isCompleted() || isFailed()}
+        spinner={isRunning()}
+        separate={true}
+        part={props.part}
+      >
+        {info().title}
+      </InlineTool>
+      <Show when={info().items.length > 0}>
+        <For each={info().items}>
+          {(item) => (
+            <box paddingLeft={3}>
+              <text paddingLeft={2} fg={theme.textMuted} wrapMode="none">
+                {item}
+              </text>
+            </box>
+          )}
+        </For>
+      </Show>
+    </>
+  )
+}
+
 function GenericTool(props: ToolProps) {
   const { theme } = useTheme()
   const ctx = use()
@@ -2223,56 +2381,63 @@ function WebSearch(props: ToolProps) {
 }
 
 function StrategyTool(props: ToolProps) {
-  const names = createMemo(() => formatStrategyNames(props.input))
+  const { theme } = useTheme()
+  const label = createMemo(() => strategyLabel(props.input))
+  const running = createMemo(() => !["completed", "error"].includes(props.part.state.status))
   return (
     <InlineTool
       icon="⚙"
-      pending="Loading strategies..."
-      failure="Strategy loading failed"
-      complete={names()}
+      color={theme.secondary}
+      pending={label()}
+      complete={true}
+      spinner={running()}
+      separate={true}
       part={props.part}
     >
-      Strategy{names() ? ` ${names()}` : ""}
+      {label()}
     </InlineTool>
   )
 }
 
 function StructureTool(props: ToolProps) {
-  const label = createMemo(() => formatStructureLabel(props.input))
+  const { theme } = useTheme()
+  const paths = createMemo(() => parseStructurePaths(props.input))
+  const failed = createMemo(() => props.part.state.status === "error")
+  const running = createMemo(() => !["completed", "error"].includes(props.part.state.status))
+  const color = createMemo(() => (failed() ? theme.error : theme.success))
   return (
-    <InlineTool
-      icon="▤"
-      pending="Recording structure..."
-      failure="Structure recording failed"
-      complete={true}
-      part={props.part}
+    <box
+      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+      paddingLeft={3}
+      marginTop={1}
+      flexDirection="column"
+      flexShrink={0}
     >
-      {label()}
-    </InlineTool>
-  )
-}
-
-function AuditTool(props: ToolProps) {
-  const label = createMemo(() => formatAuditLabel(props.input))
-  return (
-    <InlineTool icon="✓" pending="Auditing artifact..." failure="Audit failed" complete={true} part={props.part}>
-      {label()}
-    </InlineTool>
-  )
-}
-
-function DesignTool(props: ToolProps) {
-  const label = createMemo(() => formatDesignLabel(props.input))
-  return (
-    <InlineTool
-      icon="✦"
-      pending="Recording design direction..."
-      failure="Design direction failed"
-      complete={true}
-      part={props.part}
-    >
-      {label()}
-    </InlineTool>
+      <box flexDirection="row">
+        <text width={INLINE_TOOL_ICON_WIDTH} fg={color()} wrapMode="none">
+          ▤
+        </text>
+        <text fg={color()} wrapMode="none">
+          {failed() ? "Structure recording failed" : "Structure:"}
+        </text>
+      </box>
+      <Show when={!failed()}>
+        <Switch>
+          <Match when={paths().length > 0}>
+            <For each={paths()}>
+              {(file) => (
+                <text paddingLeft={4} fg={theme.textMuted} wrapMode="none">
+                  {file}
+                </text>
+              )}
+            </For>
+          </Match>
+          <Match when={running()}>
+            <Spinner color={theme.textMuted}>Recording structure...</Spinner>
+          </Match>
+        </Switch>
+      </Show>
+    </box>
   )
 }
 
@@ -2677,12 +2842,7 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
 }
 
 function input(input: Record<string, unknown>, omit?: string[]): string {
-  const primitives = Object.entries(input).filter(([key, value]) => {
-    if (omit?.includes(key)) return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  })
-  if (primitives.length === 0) return ""
-  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+  return cleanInputArgs(input, omit)
 }
 
 function stringValue(value: unknown) {
@@ -2718,30 +2878,12 @@ export function toolDisplay(tool: string) {
   return toolDisplays.has(tool) ? tool : "generic"
 }
 
-export function formatStrategyNames(input: Record<string, unknown>) {
-  const name = stringValue(input.name)
-  const names = Array.isArray(input.names)
-    ? input.names.filter((name): name is string => typeof name === "string")
-    : name
-      ? [name]
-      : []
-  return [...new Set(names)].join(", ")
-}
-
-export function formatStructureLabel(input: Record<string, unknown>) {
-  const count = Array.isArray(input.files) ? input.files.length : 0
-  return `Structure${count ? ` ${count} file${count === 1 ? "" : "s"}` : ""}`
-}
-
-export function formatAuditLabel(input: Record<string, unknown>) {
-  const artifact = stringValue(input.artifact)
-  const axes = Array.isArray(input.axes) ? input.axes.filter((axis): axis is string => typeof axis === "string") : []
-  return `Audit${artifact ? ` ${artifact}` : ""}${axes.length ? ` (${axes.join(", ")})` : ""}`
-}
-
-export function formatDesignLabel(input: Record<string, unknown>) {
-  const direction = stringValue(input.direction)
-  return `Design${direction ? ` ${direction}` : ""}`
+export function parseStructurePaths(input: Record<string, unknown>) {
+  if (!Array.isArray(input.files)) return []
+  return input.files.flatMap((item) => {
+    const filePath = recordValue(item)?.path
+    return typeof filePath === "string" && filePath.trim() ? [filePath] : []
+  })
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {

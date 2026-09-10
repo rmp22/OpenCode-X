@@ -7,10 +7,82 @@ import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
+import { ActivityRuntime } from "@/ocx/activity/runtime"
+
+export interface ProcessHandle {
+  pid: number
+  kill: (signal?: NodeJS.Signals | number) => void
+  cleanup?: () => void | Promise<void>
+}
+
+export class ProcessGroup {
+  private static groups = new Map<string, Set<ProcessHandle>>()
+
+  static register(sessionID: string, handle: ProcessHandle): () => void {
+    let group = ProcessGroup.groups.get(sessionID)
+    if (!group) {
+      group = new Set()
+      ProcessGroup.groups.set(sessionID, group)
+    }
+    group.add(handle)
+    return () => {
+      const current = ProcessGroup.groups.get(sessionID)
+      if (current) {
+        current.delete(handle)
+        if (current.size === 0) {
+          ProcessGroup.groups.delete(sessionID)
+        }
+      }
+    }
+  }
+
+  static async terminate(sessionID: string, gracePeriodMs = 2000): Promise<void> {
+    const group = ProcessGroup.groups.get(sessionID)
+    if (!group || group.size === 0) {
+      ProcessGroup.groups.delete(sessionID)
+      return
+    }
+
+    const handles = Array.from(group)
+    ProcessGroup.groups.delete(sessionID)
+
+    for (const h of handles) {
+      try {
+        h.kill("SIGTERM")
+      } catch (error) {
+        void error
+      }
+    }
+
+    const start = Date.now()
+    while (Date.now() - start < gracePeriodMs) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+
+    for (const h of handles) {
+      try {
+        h.kill("SIGKILL")
+      } catch (error) {
+        void error
+      }
+      try {
+        await h.cleanup?.()
+      } catch (error) {
+        void error
+      }
+    }
+  }
+
+  static clear(sessionID: string): void {
+    ProcessGroup.groups.delete(sessionID)
+  }
+}
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly registerProcess: (sessionID: SessionID, handle: ProcessHandle) => () => void
+  readonly terminateProcesses: (sessionID: SessionID) => Effect.Effect<void>
   readonly ensureRunning: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<SessionV1.WithParts>,
@@ -59,6 +131,8 @@ const layer = Layer.effect(
       const next = Runner.make<SessionV1.WithParts>(data.scope, {
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
+          ActivityRuntime.reconcile(sessionID, { idle: true })
+          ActivityRuntime.clearTransient(sessionID)
           yield* status.set(sessionID, { type: "idle" })
         }),
         onBusy: status.set(sessionID, { type: "busy" }),
@@ -76,6 +150,7 @@ const layer = Layer.effect(
 
     const cancel = Effect.fn("SessionRunState.cancel")(function* (sessionID: SessionID) {
       yield* cancelBackgroundJobs(background, sessionID)
+      yield* Effect.promise(() => ProcessGroup.terminate(sessionID))
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (!existing) {
@@ -104,7 +179,10 @@ const layer = Layer.effect(
         .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    const registerProcess = (sessionID: SessionID, handle: ProcessHandle) => ProcessGroup.register(sessionID, handle)
+    const terminateProcesses = (sessionID: SessionID) => Effect.promise(() => ProcessGroup.terminate(sessionID))
+
+    return Service.of({ assertNotBusy, cancel, registerProcess, terminateProcesses, ensureRunning, startShell })
   }),
 )
 

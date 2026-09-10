@@ -17,6 +17,8 @@ import {
 } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
+import { OCXRetry } from "@/ocx/ocx-retry"
+import { TokenCompression } from "@/ocx/token-compression"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -36,6 +38,8 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
 
+import type { AttentionMask, AttentionSegment } from "@/ocx/attention/types"
+
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
   code: "ZlibError"
@@ -50,6 +54,52 @@ function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
   const omitted = text.length - maxChars
   return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
+}
+
+function toolIdCandidates(callID: string | undefined, partID: string | undefined): Set<string> {
+  const candidates = new Set<string>()
+  for (const raw of [callID, partID]) {
+    if (!raw) continue
+    candidates.add(raw)
+    candidates.add(`tool:${raw}`)
+  }
+  return candidates
+}
+
+function attentionSegmentMatchesTool(
+  seg: AttentionSegment,
+  callID: string | undefined,
+  partID: string | undefined,
+): boolean {
+  const candidates = toolIdCandidates(callID, partID)
+  if (candidates.size === 0) return false
+  if (candidates.has(seg.id)) return true
+  // Split segments (`tool:<callID>:part_N`) belong to the same tool call.
+  for (const candidate of candidates) {
+    if (seg.id.startsWith(candidate + ":")) return true
+  }
+  const metadata = seg.metadata as Record<string, unknown> | undefined
+  const metaCallId = metadata?.callId
+  const parentSegmentId = metadata?.parentSegmentId
+  if (typeof metaCallId === "string" && candidates.has(metaCallId)) return true
+  if (typeof metaCallId === "string" && candidates.has(`tool:${metaCallId}`)) return true
+  if (typeof parentSegmentId === "string" && candidates.has(parentSegmentId)) return true
+  if (typeof parentSegmentId === "string" && candidates.has(`tool:${parentSegmentId}`)) return true
+  return false
+}
+
+function focusedIdMatchesTool(
+  focusedId: string,
+  callID: string | undefined,
+  partID: string | undefined,
+): boolean {
+  const candidates = toolIdCandidates(callID, partID)
+  if (candidates.has(focusedId)) return true
+  // A focus on the parent id covers split parts and vice versa.
+  for (const candidate of candidates) {
+    if (candidate.startsWith(focusedId + ":") || focusedId.startsWith(candidate + ":")) return true
+  }
+  return false
 }
 
 export const Event = {
@@ -131,7 +181,12 @@ function providerMeta(metadata: Record<string, any> | undefined) {
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: {
+    stripMedia?: boolean
+    toolOutputMaxChars?: number
+    compactHistoricalTools?: boolean
+    attentionMask?: AttentionMask
+  },
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
@@ -192,7 +247,8 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     return { type: "json", value: output as never }
   }
 
-  for (const msg of input) {
+  for (let msgIndex = 0; msgIndex < input.length; msgIndex++) {
+    const msg = input[msgIndex]
     if (msg.parts.length === 0) continue
 
     if (msg.info.role === "user") {
@@ -290,10 +346,45 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
-              ? "[Old tool result content cleared]"
-              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+            const isHistorical = msgIndex < input.length - 2
+            let isStowed = false
+            let stowedSegmentId = `tool:${part.callID ?? (part as { id?: string }).id ?? "unknown"}`
+            let stowedSummary: string | undefined
+
+            if (options?.attentionMask) {
+              const mask = options.attentionMask
+              const maskedSeg = mask.maskedSegments?.find((s) =>
+                attentionSegmentMatchesTool(s, part.callID, (part as { id?: string }).id),
+              )
+              if (maskedSeg) {
+                isStowed = true
+                stowedSegmentId = maskedSeg.id
+                stowedSummary = maskedSeg.summary
+              } else if (mask.mode === "local") {
+                isStowed = true
+              } else if (mask.mode === "focus") {
+                const isAttended =
+                  mask.attendedSegments?.some((s) =>
+                    attentionSegmentMatchesTool(s, part.callID, (part as { id?: string }).id),
+                  ) ||
+                  mask.focusedSegmentIds?.some((id) =>
+                    focusedIdMatchesTool(id, part.callID, (part as { id?: string }).id),
+                  )
+                if (!isAttended) {
+                  isStowed = true
+                }
+              }
+            }
+
+            const outputText = isStowed
+              ? `[STOWED TOOL RESULT: id="${stowedSegmentId}" | ${stowedSummary ?? part.tool} | Use <focus segments="${stowedSegmentId}"> to inspect]`
+              : part.state.time.compacted
+                ? "[Old tool result content cleared]"
+                : isHistorical && (options?.compactHistoricalTools ?? true) && (part.tool === "read" || part.tool === "glob" || part.tool === "grep" || part.tool === "bash") && typeof part.state.output === "string" && part.state.output.length > 500
+                  ? TokenCompression.summarizeToolOutputForHistory(part.tool, part.state.input, part.state.output)
+                  : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+            const attachments =
+              isStowed || part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message
@@ -417,7 +508,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: {
+    stripMedia?: boolean
+    toolOutputMaxChars?: number
+    compactHistoricalTools?: boolean
+    attentionMask?: AttentionMask
+  },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }
@@ -562,7 +658,15 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
     : -1
   const tailIndex = part?.tail_start_id ? result.findIndex((msg) => msg.info.id === part.tail_start_id) : -1
   if (tailIndex >= 0 && tailIndex < compactionIndex && summaryIndex > compactionIndex) {
+    const rootUser = result.find((msg) => msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction"))
+    const rootIndex = rootUser ? result.indexOf(rootUser) : -1
+    const alreadyInTail = rootIndex >= 0 && (
+      (tailIndex <= rootIndex && rootIndex < compactionIndex) ||
+      (rootIndex > summaryIndex)
+    )
+    const anchor = rootUser && !alreadyInTail ? [rootUser] : []
     return [
+      ...anchor,
       ...result.slice(compactionIndex, summaryIndex + 1),
       ...result.slice(tailIndex, compactionIndex),
       ...result.slice(summaryIndex + 1),
@@ -614,6 +718,10 @@ export function fromError(
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
+    // OCX empty-response retries surface through the storage-compatible
+    // UnknownError shape because the persisted error union is upstream-owned.
+    case OCXRetry.EmptyResponseError.isInstance(e):
+      return new NamedError.Unknown({ message: e.data.message }).toObject()
     case LoadAPIKeyError.isInstance(e):
       return new AuthError(
         {

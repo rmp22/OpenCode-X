@@ -1,0 +1,103 @@
+=== CODE WRITING ===
+
+- B4 write: read every applicable `AGENTS.md` + repo instruction file. Follow user req > repo stack > repo instruction > OCX default.
+- Read target + neighbor file. Reuse existing type/name/pattern.
+- Reuse an existing dependency or helper before adding one. Check what project already ship.
+- Compute once per path. No repeat derivation/parse/remote call in one flow.
+- Out: stub/TODO/placeholder branch/invented param/comment/hardcode string/FQN/wildcard import.
+- No explanatory comments: do not add comments that explain code unless explicitly requested by the user. Readable code explains itself.
+- Anti-slop in general coding: no single-use micro-helpers, no generic try/catch error swallowing, no `as any` type escapes, no reinvented standard library utilities.
+- Verify imported package/API/config key/repo convention vs source or doc.
+- Generated import/API/dep/claim/config = untrusted until verified.
+- Generated code = human code gate: same correctness+security bar. Partial gen/unrequested behavior reject.
+- One purpose per method. Nest < 3 level. Param < 4.
+- For larger changes, plan file ownership before editing. Entry file thin. Each part/state/action/error/resource/test = clear home.
+- Define the file and module tree before the first change. Establish the real boundary before implementation. No big-file-now-split-later promise.
+- Split at real boundary. No empty wrapper/no one-file-per-function.
+- Fit new code to its callers, state, error, lifetime, storage, test. Happy-path-only = no.
+- Production change easy review. No guessed setup/unrelated edit. A broad refactor or rewrite is valid only when the requirements bar allows it.
+- Before writing, check size/limit/math/empty/time/lifetime/security failure cases.
+- Kotlin no `!!`. No `*Util`/`*Helper` name. No generic catch. No System.out/printStackTrace.
+- SIMPLE ENGLISH rule apply to every generated text.
+- New behavior = behavior test. Run the project check before a success claim.
+- Test oracle explicit: what happen, why, which fail it catch. Add negative/boundary/timeout/permission/concurrency/cleanup case when relevant.
+- Coverage or a happy-path pass is not proof without a behavior check.
+- Test = evidence, not deliverable. Must touch production path.
+- Reject: assertion-free test/mock-only test/cannot-fail-for-defect test.
+- No prod+its-check same-edit hide. Wrong check = prove why.
+- Change can reach malformed/fail/timeout/denied-permission/cancel/cleanup/rollback = test it.
+- Remove: fake data/placeholder success/dead branch/empty catch/dup logic/silent fallback/invented dep.
+- Public API/dep/config/generated-artifact claim verify from source or primary doc.
+
+=== NAMING RULES ===
+
+- Name by responsibility, data, state, or action. Do not use vague names such as thing, stuff, foo, bar, helper, or util when the code can state its purpose.
+- Match the existing project vocabulary and naming style before applying a language default. Keep one concept under one name.
+- Use verbs for actions, nouns for values and types, and names that show the important unit, scope, or lifetime. Avoid needless abbreviations and invented jargon.
+- TypeScript and JavaScript: use lowerCamelCase for variables and functions, PascalCase for classes, types, and components, and stable names for event handlers and predicates.
+- Python: use snake_case for modules, functions, methods, and variables; PascalCase for classes; and UPPER_SNAKE_CASE only for true constants.
+- Rust: use snake_case for modules, functions, methods, and variables; PascalCase for types, traits, and enum variants; and SCREAMING_SNAKE_CASE only for true constants.
+- Go: use mixedCaps, capitalize exported names, keep initialisms consistent, and let the name show ownership or behavior instead of adding Get or Do without meaning.
+- Java and Kotlin: use PascalCase for types and lowerCamelCase for methods and properties; use UPPER_SNAKE_CASE for constants; avoid generic *Util and *Helper names; keep Java qualification local to real collisions.
+- C and C++: follow the repository convention for types, functions, macros, and namespaces; keep public names stable; do not mix naming schemes in one module.
+- Swift: use UpperCamelCase for types and protocols, lowerCamelCase for functions, properties, and enum cases, and names that read like a call at the use site.
+- Shell: use lower_snake_case for local variables and functions unless the project convention requires another form; reserve UPPER_SNAKE_CASE for exported environment values.
+- SQL: follow the schema convention for tables, columns, aliases, and constraints; prefer descriptive snake_case names over positional aliases.
+- HTML and CSS: use semantic class, id, and data names tied to behavior or content; do not name a component only by color, position, or a temporary visual fix.
+- Preserve valid domain terms, public names, generated names, and interoperability names. Guidance is not a reason to rename working APIs.
+
+=== END NAMING RULES ===
+
+=== CREATION-TIME SEMANTIC COMPRESSION ===
+
+- Treat five or more semantic words or more than 35 characters as a review trigger for a newly proposed identifier; six or more words or more than 48 characters is a strong trigger.
+- Check sentence-shaped predicates, repeated enclosing or parameter context, representation words such as mask, flag, bit, map, array, or bundle, temporal clauses, and invented abbreviations.
+- State the observable domain meaning before choosing the final name. Do not replace a flagged name with a shorter abbreviation or a vague synonym.
+- Preserve established public, platform, protocol, generated, and repository terms when evidence shows that shortening would reduce correctness.
+- The analyzer reports signals only. It never renames symbols or rewrites source automatically.
+
+=== END CREATION-TIME SEMANTIC COMPRESSION ===
+
+=== STRUCTURE RULES ===
+
+- Treat structure as part of correctness. Work-today ≠ maintainable.
+- Multi-file change OR one-file-multi-responsibility = structure pass before first write:
+  1. Read existing file/caller.
+  2. Write a `FILE PLAN` with `path`, `owns`, `does not own`, `imports or uses`, `public inputs or outputs` per changed/new file.
+  3. State dep direction + state owner. Not review-phase leftover.
+- Module = one responsibility + one reason-to-change. Small public surface. One-way dep.
+- Split valid only w/ real caller + clear boundary + checkable behavior sans unrelated-module read.
+- No split-by-line-count/no empty wrapper/no hidden-boundary-crossing move.
+- Reuse existing module/data. Same-job second helper/component/store/style-source/API path = out.
+- Big-file extract = one responsibility at a time: map boundary, create dest, wire caller, check behavior, continue.
+- Preserve public name/import path/load order/side effect/state owner/behavior unless req bar allow change.
+- If no clean boundary can be proven, keep code together + state reason. No file-count modular split.
+- HTML/frontend mutation: root entry stays a shell + repo real composition mechanism + every extracted module has a caller before apply.
+
+=== END STRUCTURE RULES ===
+
+=== SPAGHETTI GUARD ===
+
+- Function fit one screen (~50 line ceiling); longer = split by step or extract named helper.
+- Early return over else pyramid. else-if chain > 3 arm = lookup table/object map.
+- Flag argument switching behavior inside one function = split into two functions.
+- File crossing 400 lines while holding multiple concerns = split by responsibility before more edits.
+- One feature check lives at one boundary; same condition sprinkled through shared module = pull it up.
+- No circular import ever; shared code move to leaf module (gate C20 enforce).
+- Global mutable state = last resort; pass value or own it in one store module.
+- Magic string/number repeated 2+ place = named constant, one source.
+- Layer smell: UI file talk SQL, route file do business math = push logic down to owning module.
+
+=== END SPAGHETTI GUARD ===
+
+=== BOILERPLATE SELECTION ===
+
+- Data-only value = language-native value type. Identity/lifecycle/owner/invariant = behavior-bearing type.
+- Concrete form via language adapter: Kotlin data class/Java record/C++ struct-or-class/Go struct/repo equivalent.
+- Newer syntax: check language level/generated code/serialization/framework/ABI/interop before choosing.
+- Getter/setter/builder/wrapper/helper-class out when language or project already provide simpler safe type.
+- Boilerplate stay at needing boundary. Domain behavior into data carrier for file-count = no.
+
+=== END BOILERPLATE SELECTION ===
+
+=== END CODE WRITING ===

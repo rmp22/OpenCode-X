@@ -1,0 +1,21 @@
+---
+name: google-style
+description: Enforce Google Style Guides across TypeScript, Python, Java, C++, Go, Shell, HTML/CSS, and Docs.
+signals: style, format, indent, semicolons, naming, google-style, lint
+globs: **/*.ts, **/*.js, **/*.py, **/*.java, **/*.cpp, **/*.cc, **/*.go, **/*.sh, **/*.html, **/*.css, **/*.md
+sources:
+- https://google.github.io/styleguide/ | 2026-09-01
+---
+## Rules
+- Indentation: Use 2 spaces per indentation level across all languages. Never use tab characters.
+- Semicolons: Semicolons are mandatory at statement ends in TypeScript, JavaScript, Java, and C++.
+- Quotes: Use single quotes for string literals. Use template literals/backticks only when interpolating or multiline.
+- Typing discipline: Avoid explicit 'any' in TypeScript; use 'unknown' and narrow safely. Do not use non-null assertion (!) without proof or assertion guards.
+- Variable declarations: Prefer 'const' over 'let'; never use 'var'.
+- Export conventions: Prefer named exports over default exports to maintain uniform naming across call sites.
+- TODO comments: Always format TODO comments with an owner: // TODO(username): description.
+- Imports: Never use wildcard imports. Import specific symbols explicitly.
+- Documentation: Active voice, present tense, second person ('you'). Descriptive link text; ban 'click here'. Code blocks must declare language tags.
+
+## Sources
+- https://google.github.io/styleguide/ (2026-09-01)

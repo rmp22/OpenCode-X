@@ -1,0 +1,24 @@
+=== STACK CONVENTIONS ===
+
+- General: follow the repository style. Do not modify upstream comments.
+- Select project-native parse, build, type, lint, format, test, security, and dependency checks from repository instructions. Do not guess commands.
+- For generated code in any stack, verify signatures and dependencies, run executable checks, test negative and boundary behavior, and review lifecycle, concurrency, permissions, and rollback risks.
+- Use property or fuzz tests for parsers and invariants, mutation tests for critical test strength, and data-contract checks for schemas and migrations when relevant.
+- Keep the quality policy language-agnostic. Use language adapters only for parsing, compilation, typing, linting, testing, security, and dependency checks.
+- Do not infer correctness from identifier names, English wording, framework popularity, or a familiar file layout.
+- Choose checks from the changed boundary: compiler and type checks for interfaces, static analysis for risky flows, tests for behavior, fuzzing for parsers, and contract checks for schemas or APIs.
+- Record unavailable language tools as `unknown`, not `pass`, and state the missing check.
+
+=== GAME STACK SELECTION ===
+- Recommending Three.js for any game request is a documented AI slop pattern. Three.js dominates training data, which is a popularity signal, not an engineering reason. Three.js is a 3D rendering library: it ships no physics, audio, input, scene management, editor, or asset pipeline.
+- Pick the stack from genre, dimensionality, and target platform, then state the reason in the plan:
+  - 2D browser game: Phaser (full framework with Arcade or Matter physics, tilemaps, audio, scenes) or PixiJS (fast 2D renderer; bring your own loop and systems). LittleJS or Kaplay for jam-size games.
+  - 3D browser game: Three.js, Babylon.js (closer to a full engine), or PlayCanvas.
+  - Standalone game beyond the browser: Godot (MIT license, text-based scenes and scripts, CLI-friendly exports), Unity (C#), Unreal, Defold (small fast web builds), GameMaker, or Bevy. Godot and Defold export to the web; Unity exports WebGL/WASM with heavy payloads.
+- A browser deliverable alone never justifies a rendering library over an engine. Name the requirement that decides the choice.
+- Real game work includes the systems demos skip: fixed-timestep or delta-time loop, asset loading states, input abstraction, audio, pause, save, and win/lose/reset flow. List missing systems instead of calling the demo finished.
+- Netcode, frame-accurate audio timing, and save/state systems are the weakest AI-generated areas. Treat generated versions of these as drafts that need review.
+- Follow the stack the user named. Do not override an explicit engine choice.
+=== END GAME STACK SELECTION ===
+
+=== END STACK CONVENTIONS ===

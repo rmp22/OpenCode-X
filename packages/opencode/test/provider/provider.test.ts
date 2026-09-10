@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { Env } from "../../src/env"
 import { Plugin } from "../../src/plugin/index"
 import { Provider } from "@/provider/provider"
+import { ConfigPaths } from "@/config/paths"
 
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
@@ -1441,6 +1442,7 @@ test("mode options and cost are derived from the base model", () => {
   } as unknown as ModelsDev.Provider
 
   const model = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-fast"]
+  expect(model.limit.context).toBe(1_050_000)
   expect(model.cost.input).toEqual(5)
   expect(model.cost.output).toEqual(30)
   expect(model.cost.cache.read).toEqual(0.5)
@@ -1474,6 +1476,7 @@ test("models.dev normalization fills required response fields", () => {
   } as unknown as ModelsDev.Provider
 
   const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4"]
+  expect(model.limit.context).toBe(1_050_000)
   expect(model.api.url).toBe("")
   expect(model.capabilities.temperature).toBe(false)
   expect(model.capabilities.reasoning).toBe(false)
@@ -1482,6 +1485,34 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.capabilities.interleaved).toEqual({ field: "reasoning_text" })
   expect(model.release_date).toBe("")
 })
+
+it.instance(
+  "explicit provider model context is preserved",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("window-override")].models.large
+    expect(model.limit.context).toBe(1_000_000)
+  }),
+  {
+    config: {
+      provider: {
+        "window-override": {
+          name: "Window Override",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.example.com/v1",
+          env: [],
+          options: { apiKey: "test" },
+          models: {
+            large: {
+              name: "Large",
+              limit: { context: 1_000_000, output: 64_000 },
+            },
+          },
+        },
+      },
+    },
+  },
+)
 
 test("models.dev reasoning options replace generated variants and unsupported toggles fall back", () => {
   const provider = {
@@ -1924,7 +1955,7 @@ const provideMultiInstance = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
 it.effect("plugin config providers persist after instance dispose", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
-    const configDir = path.join(dir, ".opencode")
+    const configDir = path.join(dir, ConfigPaths.PROJECT_DIRECTORY)
     const root = path.join(configDir, "plugin")
     yield* Effect.promise(() => mkdir(root, { recursive: true }))
     yield* Effect.promise(() => markPluginDependenciesReady(configDir))
@@ -1981,7 +2012,7 @@ it.instance(
   "plugin config enabled and disabled providers are honored",
   Effect.gen(function* () {
     const instance = yield* TestInstance
-    const configDir = path.join(instance.directory, ".opencode")
+    const configDir = path.join(instance.directory, ConfigPaths.PROJECT_DIRECTORY)
     const root = path.join(configDir, "plugin")
     yield* Effect.promise(() => mkdir(root, { recursive: true }))
     yield* Effect.promise(() => markPluginDependenciesReady(configDir))

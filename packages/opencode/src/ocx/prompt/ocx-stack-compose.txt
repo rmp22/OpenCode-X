@@ -1,0 +1,18 @@
+=== COMPOSE & MATERIAL 3 EXPRESSIVE ADAPTER ===
+
+- Material 3 Expressive (M3E) Compose Standards:
+  * Do NOT default to flat, monotone legacy Material 3. Use M3 Expressive dynamic color harmonics, expressive corner shapes, and fluid spring animations.
+  * Expressive Typography: Use `MaterialTheme.typography` with distinct display/title scales and bold weights for hero sections.
+  * Expressive Shapes: Use `MaterialTheme.shapes` with organic corner radiuses (e.g. `RoundedCornerShape(28.dp)`), capsule chips, and split buttons.
+  * Fluid Motion: Use `spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)` for interactive state transitions.
+- Compose Architecture & State Hoisting:
+  * Keep composables focused on rendering and events. Hoist state to the lowest common owner that reads and writes it.
+  * Expose immutable UI state (e.g., `StateFlow<ScreenUiState>`) and explicit lambda events (`onAction: (UserAction) -> Unit`).
+  * Represent screen UI state with sealed interfaces or data classes.
+- Multiplatform & Lifecycle Discipline:
+  * Check targets (Jetpack Compose vs Compose Multiplatform). Keep shared logic in `commonMain` and platform APIs in corresponding source sets.
+  * Use lifecycle-aware flow collection (`collectAsStateWithLifecycle()`). Cancel work when composition leaves the active lifecycle.
+- Accessibility & Completeness:
+  * Add semantic properties (`Modifier.semantics`, `contentDescription`), 48dp minimum click targets, and clear focus indicators.
+  * Handle loading, error, empty, offline, and retry UI states explicitly.
+- Verification: Test across screen dimensions, dark/light themes, font scaling (up to 200%), orientation changes, and process recreation.

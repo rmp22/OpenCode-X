@@ -32,10 +32,45 @@ import { batch, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+import { appendActivityEntry, workflowLogEntries, type OcxLogEntry } from "../ocx/ocx-log"
+
+export type OcxActivityProjection = {
+  sessionID: string
+  seq: number
+  activityID: string | null
+  ownerType: string
+  ownerID: string
+  kind: string
+  state: "active" | "completed" | "failed" | "blocked" | "cancelled" | "superseded" | "none"
+  title?: string
+  detail?: string
+  progressCurrent?: number
+  progressTotal?: number
+  updatedAt: number
+}
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
   switchableOrgCount: 0,
+}
+
+function isCanonicalActivity(value: Record<string, unknown>): value is OcxActivityProjection {
+  return (
+    typeof value.sessionID === "string" &&
+    typeof value.seq === "number" &&
+    Number.isFinite(value.seq) &&
+    (typeof value.activityID === "string" || value.activityID === null) &&
+    typeof value.ownerType === "string" &&
+    typeof value.ownerID === "string" &&
+    typeof value.kind === "string" &&
+    typeof value.state === "string" &&
+    ["active", "completed", "failed", "blocked", "cancelled", "superseded", "none"].includes(value.state) &&
+    (value.title === undefined || typeof value.title === "string") &&
+    (value.detail === undefined || typeof value.detail === "string") &&
+    (value.progressCurrent === undefined || typeof value.progressCurrent === "number") &&
+    (value.progressTotal === undefined || typeof value.progressTotal === "number") &&
+    typeof value.updatedAt === "number"
+  )
 }
 
 function search<T>(items: T[], target: string, key: (item: T) => string) {
@@ -84,6 +119,25 @@ export const {
       session_status: {
         [sessionID: string]: SessionStatus
       }
+      session_workflow: {
+        [sessionID: string]: {
+          workflow: string
+          phase: string
+          phases: { id: string; goal: string }[]
+          variant?: string
+          objective?: string
+          status?: "active" | "waiting" | "blocked" | "complete"
+          revision?: number
+          intentRevision?: number
+          operation?: { surface: string; action: string; targets?: string[] }
+        }
+      }
+      session_ocx_log: {
+        [sessionID: string]: OcxLogEntry[]
+      }
+      session_activity: {
+        [sessionID: string]: OcxActivityProjection | undefined
+      }
       session_diff: {
         [sessionID: string]: SnapshotFileDiff[]
       }
@@ -126,6 +180,9 @@ export const {
       provider_default: {},
       session: [],
       session_status: {},
+      session_workflow: {},
+      session_ocx_log: {},
+        session_activity: {},
       session_diff: {},
       todo: {},
       message: {},
@@ -144,6 +201,13 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    let ocxSeq = 0
+    const ocxNextSeq = () => ++ocxSeq
+    const appendOcxEntries = (sessionID: string, entries: OcxLogEntry[]) => {
+      const next = [...(store.session_ocx_log[sessionID] ?? []), ...entries]
+      setStore("session_ocx_log", sessionID, next.length > 50 ? next.slice(-50) : next)
+    }
+    const activitySeq = new Map<string, number>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -168,6 +232,82 @@ export const {
     }
 
     event.subscribe((event, { directory, workspace }) => {
+      if ((event.type as string) === "ocx.workflow.updated") {
+        const properties = event.properties as {
+          sessionID: string
+          workflow: string
+          phase: string
+          phases: { id: string; goal: string }[]
+          variant?: string
+          objective?: string
+          status?: "active" | "waiting" | "blocked" | "complete"
+          revision?: number
+          intentRevision?: number
+          operation?: { surface: string; action: string; targets?: string[] }
+        }
+        // Snapshot before writing: store objects are live proxies, so reads
+        // after setStore would already observe the new transition.
+        const existing = store.session_workflow[properties.sessionID]
+        const previous = existing ? { workflow: existing.workflow, phase: existing.phase } : undefined
+        setStore("session_workflow", properties.sessionID, {
+          workflow: properties.workflow,
+          phase: properties.phase,
+          phases: Array.isArray(properties.phases) ? properties.phases : [],
+          ...(properties.variant ? { variant: properties.variant } : {}),
+          ...(properties.objective ? { objective: properties.objective } : {}),
+          ...(properties.status ? { status: properties.status } : {}),
+          ...(properties.revision !== undefined ? { revision: properties.revision } : {}),
+          ...(properties.intentRevision !== undefined ? { intentRevision: properties.intentRevision } : {}),
+          ...(properties.operation ? { operation: properties.operation } : {}),
+        })
+        // Every pipeline run republishes the state; only real transitions
+        // become history entries.
+        const entries = workflowLogEntries(
+          previous,
+          { workflow: properties.workflow, phase: properties.phase },
+          ocxNextSeq,
+          Date.now(),
+        )
+        if (entries.length > 0) appendOcxEntries(properties.sessionID, entries)
+        return
+      }
+      if ((event.type as string) === "ocx.activity") {
+        const properties = event.properties as Record<string, unknown>
+        if (isCanonicalActivity(properties)) {
+          const current = store.session_activity[properties.sessionID]
+          const sequence = activitySeq.get(properties.sessionID) ?? current?.seq ?? 0
+          if (properties.seq <= sequence) return
+          if (
+            current &&
+            properties.state !== "active" &&
+            properties.activityID !== null &&
+            current.activityID !== properties.activityID
+          )
+            return
+          activitySeq.set(properties.sessionID, properties.seq)
+          if (properties.state === "none") {
+            setStore("session_activity", properties.sessionID, undefined)
+            return
+          }
+          setStore("session_activity", properties.sessionID, properties)
+          if (["completed", "failed", "blocked", "cancelled", "superseded"].includes(properties.state))
+            setStore(
+              "session_ocx_log",
+              properties.sessionID,
+              appendActivityEntry(store.session_ocx_log[properties.sessionID] ?? [], {
+                seq: ocxNextSeq(),
+                kind: "activity",
+                value: properties.title ?? properties.kind,
+                time: properties.updatedAt,
+                state: properties.state,
+                ...(properties.activityID ? { activityID: properties.activityID } : {}),
+                ...(properties.detail ? { summary: properties.detail } : {}),
+              }),
+            )
+          return
+        }
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -309,6 +449,9 @@ export const {
 
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
+          if (event.properties.status.type === "idle") {
+            setStore("session_activity", event.properties.sessionID, undefined)
+          }
           break
         }
 

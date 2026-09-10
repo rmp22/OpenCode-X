@@ -185,6 +185,7 @@ const layer = Layer.effect(
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
+                bash: "allow",
                 todowrite: "deny",
               }),
               user,

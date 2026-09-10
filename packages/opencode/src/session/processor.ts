@@ -1,8 +1,13 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
+import { ActivityRuntime } from "@/ocx/activity/runtime"
+import { OCXRetry } from "@/ocx/ocx-retry"
+import { ProviderReasoning } from "@/ocx/reasoning/provider"
+import { ReasoningStore } from "@/ocx/reasoning/store"
+import { ReasoningTopic } from "@/ocx/reasoning/topic"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
@@ -24,10 +29,47 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
+
+// Raw reasoning text stays stored verbatim for provider replay (signed blocks
+// cannot be rewritten), but clients must not render it. Flagging lets the TUI
+// show only a loading indicator until a polished summary replaces the text.
+const rawThinkingMetadata = (metadata: SessionV1.ReasoningPart["metadata"]) => ({
+  ...metadata,
+  ocx: { ...metadata?.ocx, rawThinking: true },
+})
+
+// The early topic from the pipeline (and the refined one from the polish pass)
+// ride on the part so the TUI can label the Thought/Thinking header without
+// rendering raw reasoning.
+const topicMetadata = (metadata: SessionV1.ReasoningPart["metadata"], topic: string) => ({
+  ...metadata,
+  ocx: { ...metadata?.ocx, topic },
+})
+
+// Provider metadata replaces the whole record on delta and end. Keep the ocx
+// keys (topic, rawThinking) so the Thought header keeps its label after the
+// polish pass replaces the streamed text.
+const mergeProviderMetadata = (
+  provider: SessionV1.ReasoningPart["metadata"],
+  current: SessionV1.ReasoningPart["metadata"],
+) => {
+  if (!current?.ocx) return provider
+  return { ...provider, ocx: { ...provider?.ocx, ...current.ocx } }
+}
+
+function toolTarget(input: unknown): string | undefined {
+  if (!isRecord(input)) return undefined
+  for (const key of ["filePath", "file_path", "path", "target"]) {
+    const value = input[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return undefined
+}
 
 export interface Handle {
   readonly message: SessionV1.Assistant
@@ -51,6 +93,8 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  topic?: string
+  request?: string
 }
 
 export interface Interface {
@@ -94,6 +138,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const flags = yield* RuntimeFlags.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -113,6 +158,35 @@ const layer = Layer.effect(
         reasoningMap: {},
       }
       let aborted = false
+      if (!flags.ocxPipeline) {
+        const fallbackStatus = ReasoningStore.startStatus({
+          sessionID: input.sessionID,
+          messageID: input.assistantMessage.id,
+          taskObjective: input.request,
+        })
+        yield* ReasoningStore.publishStatus(fallbackStatus, events).pipe(Effect.ignore)
+        const fallbackReasoningID = `fallback-${input.assistantMessage.id}`
+        ctx.reasoningMap[fallbackReasoningID] = {
+          id: PartID.ascending(),
+          messageID: input.assistantMessage.id,
+          sessionID: input.assistantMessage.sessionID,
+          type: "reasoning",
+          text: fallbackStatus.title,
+          time: { start: Date.now() },
+          metadata: topicMetadata(undefined, fallbackStatus.title),
+        }
+        yield* session.updatePart(ctx.reasoningMap[fallbackReasoningID])
+      } else {
+        const lease = ActivityRuntime.createLease({
+          sessionID: input.sessionID,
+          ownerType: "assistant",
+          ownerID: input.assistantMessage.id,
+          kind: "thinking",
+          title: "Thinking",
+        })
+        yield* ActivityRuntime.publishPrimary(input.sessionID, events).pipe(Effect.ignore)
+        void lease
+      }
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -206,6 +280,14 @@ const layer = Layer.effect(
 
       const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
         if (!(reasoningID in ctx.reasoningMap)) return
+        const part = ctx.reasoningMap[reasoningID]
+        const trimmed = part.text.trim()
+        if (trimmed.length === 0) {
+          part.metadata = { ...part.metadata, ocx: { ...part.metadata?.ocx, display: false } }
+        } else if (flags.ocxPipeline) {
+          const derived = ReasoningTopic.deriveTopic(part.text)
+          if (derived && !part.metadata?.ocx?.topic) part.metadata = topicMetadata(part.metadata, derived)
+        }
         // oxlint-disable-next-line no-self-assign -- reactivity trigger
         ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
         ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
@@ -279,6 +361,16 @@ const layer = Layer.effect(
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
+            const fallbackReasoningID = Object.keys(ctx.reasoningMap).find((key) => key.startsWith("fallback-"))
+            if (fallbackReasoningID) {
+              const fallback = ctx.reasoningMap[fallbackReasoningID]
+              yield* session.removePart({
+                sessionID: fallback.sessionID,
+                messageID: fallback.messageID,
+                partID: fallback.id,
+              })
+              delete ctx.reasoningMap[fallbackReasoningID]
+            }
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -286,16 +378,36 @@ const layer = Layer.effect(
               type: "reasoning",
               text: "",
               time: { start: Date.now() },
-              metadata: value.providerMetadata,
+              metadata:
+                input.topic
+                  ? topicMetadata(value.providerMetadata, input.topic)
+                  : value.providerMetadata,
             }
             yield* session.updatePart(ctx.reasoningMap[value.id])
+            if (flags.ocxPipeline) {
+              const lease = ActivityRuntime.activeLeases(ctx.sessionID).find((item) => item.ownerID === ctx.assistantMessage.id)
+              if (lease) {
+                ActivityRuntime.updateLease(ctx.sessionID, lease.id, { kind: "thinking", title: "Thinking", detail: "" })
+                yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+              }
+            }
             return
 
           case "reasoning-delta":
             // Match dev: silently drop orphan deltas (no preceding reasoning-start).
-            if (!(value.id in ctx.reasoningMap)) return
+            if (!(value.id in ctx.reasoningMap)) {
+              const fallbackReasoningID = Object.keys(ctx.reasoningMap).find((key) => key.startsWith("fallback-"))
+              if (!fallbackReasoningID || flags.ocxPipeline) return
+              const fallback = ctx.reasoningMap[fallbackReasoningID]
+              delete ctx.reasoningMap[fallbackReasoningID]
+              ctx.reasoningMap[value.id] = { ...fallback, text: "" }
+            }
             ctx.reasoningMap[value.id].text += value.text
-            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            if (value.providerMetadata)
+              ctx.reasoningMap[value.id].metadata = mergeProviderMetadata(
+                value.providerMetadata,
+                ctx.reasoningMap[value.id].metadata,
+              )
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
@@ -303,11 +415,21 @@ const layer = Layer.effect(
               field: "text",
               delta: value.text,
             })
+            if (flags.ocxPipeline) {
+              ActivityRuntime.updatePrimaryDetail(
+                ctx.sessionID,
+                ProviderReasoning.latestReasoningSegment(ctx.reasoningMap[value.id].text),
+              )
+              yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+            }
             return
 
           case "reasoning-end":
             if (value.providerMetadata && value.id in ctx.reasoningMap) {
-              ctx.reasoningMap[value.id].metadata = value.providerMetadata
+              ctx.reasoningMap[value.id].metadata = mergeProviderMetadata(
+                value.providerMetadata,
+                ctx.reasoningMap[value.id].metadata,
+              )
             }
             yield* finishReasoning(value.id)
             return
@@ -329,6 +451,15 @@ const layer = Layer.effect(
           }
 
           case "tool-call": {
+            if (ctx.currentText) {
+              if (flags.ocxPipeline && ctx.currentText.metadata?.ocx?.deferred) {
+                ctx.currentText.metadata = {
+                  ...ctx.currentText.metadata,
+                  ocx: { ...ctx.currentText.metadata?.ocx, deferred: false },
+                }
+              }
+              yield* session.updatePart(ctx.currentText)
+            }
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -349,6 +480,35 @@ const layer = Layer.effect(
                 ? { ...value.providerMetadata, providerExecuted: true }
                 : value.providerMetadata,
             }))
+
+            const toolStatus = flags.ocxPipeline
+              ? undefined
+              : ReasoningStore.updateFromTool({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.id,
+                  toolName: value.name,
+                  args: isRecord(value.input) ? (value.input as Record<string, unknown>) : {},
+                })
+            if (toolStatus) yield* ReasoningStore.publishStatus(toolStatus, events).pipe(Effect.ignore)
+            if (flags.ocxPipeline) {
+              const leases = ActivityRuntime.activeLeases(ctx.sessionID)
+              const lease = leases.find((l) => l.ownerID === ctx.assistantMessage.id)
+              if (lease) {
+                ActivityRuntime.updateLease(ctx.sessionID, lease.id, {
+                  kind: ActivityRuntime.kindForTool(value.name),
+                  title: ActivityRuntime.titleForTool(value.name, toolTarget(value.input)),
+                })
+                yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+              }
+            } else {
+              const fallbackID = Object.keys(ctx.reasoningMap).find((k) => k.startsWith("fallback-"))
+              if (toolStatus && fallbackID && ctx.reasoningMap[fallbackID]) {
+                const part = ctx.reasoningMap[fallbackID]
+                part.text = toolStatus.title
+                part.metadata = topicMetadata(part.metadata, toolStatus.title)
+                yield* session.updatePart(part)
+              }
+            }
 
             const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
               Effect.provideService(Database.Service, database),
@@ -385,6 +545,33 @@ const layer = Layer.effect(
             if (!toolCall && value.result.type === "error") return
             if (value.result.type === "error") {
               yield* failToolCall(value.id, value.result.value)
+              const recoveryStatus = flags.ocxPipeline
+                ? undefined
+                : ReasoningStore.updateFromRecovery({
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.id,
+                    failureSummary: errorMessage(value.result.value).slice(0, 60),
+                  })
+              if (recoveryStatus) yield* ReasoningStore.publishStatus(recoveryStatus, events).pipe(Effect.ignore)
+              if (flags.ocxPipeline) {
+                const leases = ActivityRuntime.activeLeases(ctx.sessionID)
+                const lease = leases.find((l) => l.ownerID === ctx.assistantMessage.id)
+                if (lease) {
+                  ActivityRuntime.updateLease(ctx.sessionID, lease.id, {
+                    kind: "recovery",
+                    title: `Recovery · ${errorMessage(value.result.value).slice(0, 80)}`,
+                  })
+                  yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+                }
+              } else {
+                const fallbackIDErr = Object.keys(ctx.reasoningMap).find((k) => k.startsWith("fallback-"))
+                if (recoveryStatus && fallbackIDErr && ctx.reasoningMap[fallbackIDErr]) {
+                  const part = ctx.reasoningMap[fallbackIDErr]
+                  part.text = recoveryStatus.title
+                  part.metadata = topicMetadata(part.metadata, recoveryStatus.title)
+                  yield* session.updatePart(part)
+                }
+              }
               return
             }
             const rawOutput = toolResultOutput(value)
@@ -410,11 +597,53 @@ const layer = Layer.effect(
               attachments: attachments.length ? attachments : undefined,
             }
             yield* completeToolCall(value.id, output)
+            // After tool success, switch to thinking/verifying based on next expectation
+            const verifyStatus = flags.ocxPipeline
+              ? undefined
+              : ReasoningStore.updateFromVerification({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.id,
+                })
+            if (verifyStatus) yield* ReasoningStore.publishStatus(verifyStatus, events).pipe(Effect.ignore)
+            if (flags.ocxPipeline) {
+              const lease = ActivityRuntime.activeLeases(ctx.sessionID).find((item) => item.ownerID === ctx.assistantMessage.id)
+              if (lease) {
+                ActivityRuntime.updateLease(ctx.sessionID, lease.id, { kind: "thinking", title: "Thinking" })
+                yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+              }
+            }
             return
           }
 
           case "tool-error": {
             yield* failToolCall(value.id, value.error ?? new Error(value.message))
+            const recoveryStatus = flags.ocxPipeline
+              ? undefined
+              : ReasoningStore.updateFromRecovery({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.id,
+                  failureSummary: errorMessage(value.error ?? value.message).slice(0, 60),
+                })
+            if (recoveryStatus) yield* ReasoningStore.publishStatus(recoveryStatus, events).pipe(Effect.ignore)
+            if (flags.ocxPipeline) {
+              const leases = ActivityRuntime.activeLeases(ctx.sessionID)
+              const lease = leases.find((l) => l.ownerID === ctx.assistantMessage.id)
+              if (lease) {
+                ActivityRuntime.updateLease(ctx.sessionID, lease.id, {
+                  kind: "recovery",
+                  title: `Recovery · ${errorMessage(value.error ?? value.message).slice(0, 80)}`,
+                })
+                yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+              }
+            } else {
+              const fallbackIDErr2 = Object.keys(ctx.reasoningMap).find((k) => k.startsWith("fallback-"))
+              if (recoveryStatus && fallbackIDErr2 && ctx.reasoningMap[fallbackIDErr2]) {
+                const part = ctx.reasoningMap[fallbackIDErr2]
+                part.text = recoveryStatus.title
+                part.metadata = topicMetadata(part.metadata, recoveryStatus.title)
+                yield* session.updatePart(part)
+              }
+            }
             return
           }
 
@@ -522,6 +751,10 @@ const layer = Layer.effect(
               },
               { text: ctx.currentText.text },
             )).text
+            if (!ctx.model.capabilities.reasoning) {
+              const res = ProviderReasoning.extractThinkTags(ctx.currentText.text, ["think", "thinking"])
+              if (res.extracted.length > 0) ctx.currentText.text = res.cleaned
+            }
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
@@ -534,6 +767,22 @@ const layer = Layer.effect(
           case "finish":
             return
         }
+      })
+
+      const closeOpenReasoning = Effect.fn("SessionProcessor.closeOpenReasoning")(function* () {
+        for (const [key, part] of Object.entries(ctx.reasoningMap)) {
+          const end = Date.now()
+          const isFallback = key.startsWith("fallback-")
+          const trimmed = part.text.trim()
+          if (trimmed.length === 0 && !isFallback) {
+            part.metadata = { ...part.metadata, ocx: { ...part.metadata?.ocx, display: false } }
+          }
+          yield* session.updatePart({
+            ...part,
+            time: { start: part.time.start ?? end, end },
+          })
+        }
+        ctx.reasoningMap = {}
       })
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
@@ -559,14 +808,7 @@ const layer = Layer.effect(
           ctx.currentText = undefined
         }
 
-        for (const part of Object.values(ctx.reasoningMap)) {
-          const end = Date.now()
-          yield* session.updatePart({
-            ...part,
-            time: { start: part.time.start ?? end, end },
-          })
-        }
-        ctx.reasoningMap = {}
+        yield* closeOpenReasoning()
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -594,6 +836,18 @@ const layer = Layer.effect(
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
+        if (!flags.ocxPipeline) {
+          const terminal = ReasoningStore.terminalizeStatus(ctx.sessionID, ctx.assistantMessage.error ? "failed" : "done")
+          if (terminal) yield* ReasoningStore.publishStatus(terminal, events).pipe(Effect.ignore)
+        }
+        if (flags.ocxPipeline) {
+          const leases = ActivityRuntime.activeLeases(ctx.sessionID)
+          for (const lease of leases) if (lease.ownerID === ctx.assistantMessage.id) {
+            ActivityRuntime.completeLease(ctx.sessionID, lease.id, ctx.assistantMessage.error ? "failed" : "completed")
+          }
+          yield* ActivityRuntime.publishPrimary(ctx.sessionID, events).pipe(Effect.ignore)
+          if (ctx.assistantMessage.error) ActivityRuntime.reconcile(ctx.sessionID, { liveOwnerIDs: new Set() })
+        }
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
@@ -622,6 +876,10 @@ const layer = Layer.effect(
           error: ctx.assistantMessage.error,
         })
         yield* status.set(ctx.sessionID, { type: "idle" })
+        if (!flags.ocxPipeline) {
+          const failed = ReasoningStore.terminalizeStatus(ctx.sessionID, "failed")
+          if (failed) yield* ReasoningStore.publishStatus(failed, events).pipe(Effect.ignore)
+        }
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
@@ -635,15 +893,39 @@ const layer = Layer.effect(
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
-            ctx.reasoningMap = {}
-            yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
-
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
+            ctx.reasoningMap = Object.fromEntries(
+              Object.entries(ctx.reasoningMap).filter(([key]) => key.startsWith("fallback-")),
             )
+            yield* status.set(ctx.sessionID, { type: "busy" })
+            yield* OCXRetry.drain({
+              run: (attempt) => {
+                if (attempt > 0) {
+                  streamInput.messages.push({
+                    role: "user" as const,
+                    content: OCXRetry.continuePrompt(attempt),
+                  })
+                  // The failed attempt may have left reasoning parts open; close
+                  // them so the retry does not render a second Thought row.
+                  return Stream.unwrap(
+                    Effect.map(closeOpenReasoning(), () => llm.stream(streamInput).pipe(Stream.tap((event) => handleEvent(event)))),
+                  )
+                }
+                return llm.stream(streamInput).pipe(Stream.tap((event) => handleEvent(event)))
+              },
+              compacted: () => ctx.needsCompaction,
+              rateLimitInterval: globalThis.process?.env?.OPENCODE_TEST_HOME ? () => Duration.zero : undefined,
+              set: (info) => {
+                if (info.silent) return Effect.void
+                if (info.message === OCXRetry.EMPTY_RESPONSE_MESSAGE || info.message === OCXRetry.CONTINUE_PROMPT)
+                  return Effect.void
+                return status.set(ctx.sessionID, {
+                  type: "retry",
+                  attempt: info.attempt,
+                  message: info.message,
+                  next: info.next,
+                })
+              },
+            })
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
@@ -662,6 +944,15 @@ const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
+                  if (info.silent) {
+                    streamInput.messages.push({
+                      role: "user" as const,
+                      content: OCXRetry.continuePrompt(info.attempt),
+                    })
+                    return Effect.void
+                  }
+                  if (info.message === OCXRetry.EMPTY_RESPONSE_MESSAGE || info.message === OCXRetry.CONTINUE_PROMPT)
+                    return Effect.void
                   return status.set(ctx.sessionID, {
                     type: "retry",
                     attempt: info.attempt,
@@ -712,6 +1003,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    RuntimeFlags.node,
   ],
 })
 

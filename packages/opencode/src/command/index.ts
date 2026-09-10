@@ -9,6 +9,8 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_EXPLORE_CODEBASE from "./template/explore_codebase.txt"
+import PROMPT_CONTEXT from "./template/context.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -46,6 +48,8 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  EXPLORE_CODEBASE: "explore_codebase",
+  CONTEXT: "context",
 } as const
 
 export interface Interface {
@@ -85,6 +89,24 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.EXPLORE_CODEBASE] = {
+        name: Default.EXPLORE_CODEBASE,
+        description: "build source-backed repository context for a bounded scope",
+        source: "command",
+        get template() {
+          return PROMPT_EXPLORE_CODEBASE
+        },
+        hints: hints(PROMPT_EXPLORE_CODEBASE),
+      }
+      commands[Default.CONTEXT] = {
+        name: Default.CONTEXT,
+        description: "show or update persistent repository context",
+        source: "command",
+        get template() {
+          return PROMPT_CONTEXT
+        },
+        hints: hints(PROMPT_CONTEXT),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

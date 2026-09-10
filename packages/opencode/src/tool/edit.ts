@@ -18,6 +18,8 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
+import { SanityChecker } from "@/ocx/sanity"
+import { defaultSearchCache } from "@/ocx/search/cache"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -157,6 +159,7 @@ export const EditTool = Tool.define(
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
               }
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+              defaultSearchCache.invalidate(instance.directory)
               yield* events.publish(Watcher.Event.Updated, {
                 file: filePath,
                 event: "change",
@@ -199,6 +202,11 @@ export const EditTool = Tool.define(
           const normalizedFilePath = FSUtil.normalizePath(filePath)
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+
+          const sanity = SanityChecker.checkSanity(filePath, contentNew, { previousContent: contentOld })
+          if (sanity.notice) {
+            output += `\n\n${sanity.notice}`
+          }
 
           return {
             metadata: {

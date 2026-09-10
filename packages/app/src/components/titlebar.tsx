@@ -219,19 +219,10 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
               }
               if (route.type === "session") {
-                const main = tabsStore.find(
+                return tabsStore.find(
                   (item) =>
                     item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
                 )
-                if (main) return main
-                const s = session()
-                if (s?.parentID) {
-                  const parentID = s.parentID
-                  const parent = tabsStore.find(
-                    (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
-                  )
-                  if (parent) return parent
-                }
               }
             }
 
@@ -249,7 +240,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               if (route.type === "session") {
                 const s = session()
                 if (!s) return
-                const sessionId = s.parentID ?? s.id
+                const sessionId = route.sessionId ?? s.id
                 const next = { server: route.server ?? server.key, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }

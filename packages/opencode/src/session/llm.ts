@@ -29,6 +29,8 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { WorkflowV2 } from "@/ocx/workflow-v2"
+import type { OCXDb } from "@/ocx/ocx-db"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -45,6 +47,10 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  workflow?: unknown
+  currentWorkflow?: () => unknown
+  workflowStore?: OCXDb.Store
+  publishWorkflow?: (state: OCXDb.State) => Effect.Effect<void>
 }
 
 export type StreamRequest = StreamInput & {
@@ -81,8 +87,22 @@ const live: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
+    const lastCallTimes = new Map<string, number>()
+    const adaptiveDelays = new Map<string, number>()
+    const LLM_INTERVAL_MS = 1500
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const rateLimitKey = `${input.model.providerID}:${input.model.id}`
+      const now = Date.now()
+      const last = lastCallTimes.get(rateLimitKey) ?? 0
+      const dynamicDelay = adaptiveDelays.get(rateLimitKey) ?? 0
+      const minInterval = Math.max(LLM_INTERVAL_MS, dynamicDelay)
+      const elapsed = now - last
+      if (elapsed < minInterval) {
+        yield* Effect.sleep(minInterval - elapsed)
+      }
+      lastCallTimes.set(rateLimitKey, Date.now())
+
       yield* Effect.logInfo("stream", {
         providerID: input.model.providerID,
         modelID: input.model.id,
@@ -111,6 +131,8 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      const currentWorkflow = () =>
+        WorkflowV2.Gate.current({ workflow: input.workflow, sessionID: input.sessionID })
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -125,9 +147,20 @@ const live: Layer.Layer<
         workflowModel.sessionID = input.sessionID
         workflowModel.systemPrompt = prepared.system.join("\n")
         workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
-          const t = prepared.tools[toolName]
+          const resolution = WorkflowV2.Gate.resolveToolName(toolName)
+          const authorization = WorkflowV2.Gate.guardTool({
+            toolName,
+            sessionID: input.sessionID,
+          })
+          if (!authorization.allowed) {
+            return {
+              result: "",
+              error: authorization.renderedFailure ?? authorization.reason ?? `Workflow blocked: tool ${toolName} disallowed`,
+            }
+          }
+          const t = prepared.tools[toolName] ?? (resolution ? prepared.tools[resolution.canonicalName] : undefined)
           if (!t || !t.execute) {
-            return { result: "", error: `Unknown tool: ${toolName}` }
+            return { result: "", error: WorkflowV2.Gate.WorkflowGateFailure.renderFailure(WorkflowV2.Gate.WorkflowGateFailure.unknownTool(toolName)) }
           }
           try {
             const result = await t.execute!(JSON.parse(argsJson), {
@@ -225,6 +258,7 @@ const live: Layer.Layer<
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
         const native = LLMNativeRuntime.stream({
+          sessionID: input.sessionID,
           model: input.model,
           provider: item,
           auth: info,
@@ -239,7 +273,11 @@ const live: Layer.Layer<
           providerOptions: prepared.params.options,
           headers: prepared.headers,
           abort: input.abort,
-        })
+          workflow: input.workflow as never,
+          currentWorkflow: input.currentWorkflow as never,
+            workflowStore: input.workflowStore,
+            publishWorkflow: input.publishWorkflow,
+          })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
             "llm.runtime": "native",
@@ -279,6 +317,11 @@ const live: Layer.Layer<
         type: "ai-sdk" as const,
         result: streamText({
           onError(error) {
+            const isRateLimit = /429|rate limit|quota|resource exhausted|too many requests/i.test(String(error))
+            if (isRateLimit) {
+              const current = adaptiveDelays.get(rateLimitKey) ?? LLM_INTERVAL_MS
+              adaptiveDelays.set(rateLimitKey, Math.min(15_000, Math.max(current * 2, 3000)))
+            }
             bridge.fork(
               Effect.logError("stream error", {
                 providerID: input.model.providerID,
@@ -294,12 +337,17 @@ const live: Layer.Layer<
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
+            const exact = prepared.tools[failed.toolCall.toolName]
             const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-              return {
-                ...failed.toolCall,
-                toolName: lower,
-              }
+            if (!exact && lower !== failed.toolCall.toolName && prepared.tools[lower])
+              return { ...failed.toolCall, toolName: lower }
+            if (!exact) {
+              const repaired = WorkflowV2.Gate.repairToolCall({
+                toolName: failed.toolCall.toolName,
+                availableTools: Object.keys(prepared.tools),
+                sessionID: input.sessionID,
+              })
+              if (repaired?.canonicalToolName) return { ...failed.toolCall, toolName: repaired.canonicalToolName }
             }
             return {
               ...failed.toolCall,

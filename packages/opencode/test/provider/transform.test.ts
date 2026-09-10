@@ -588,8 +588,9 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.system[0]).toContain("Custom agent prompt")
     expect(result.system[0]).toContain("=== DESIGN ===")
     expect(result.system[0]).toContain("Later project instructions use complex words.")
-    expect(result.system[0].match(/=== SIMPLE ENGLISH ===/g)).toHaveLength(1)
-    expect(result.system[0].lastIndexOf("=== SIMPLE ENGLISH ===")).toBeGreaterThan(
+    const styleReminder = "Style reminder: caveman brevity, I-statements, answer first, zero filler, English."
+    expect(result.system[0].split(styleReminder)).toHaveLength(2)
+    expect(result.system[0].lastIndexOf(styleReminder)).toBeGreaterThan(
       result.system[0].indexOf("Later project instructions use complex words."),
     )
   })

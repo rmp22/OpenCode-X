@@ -12,6 +12,7 @@ const enabledByExperimental = (name: string) =>
   Config.all({ experimental, enabled: Config.boolean(name).pipe(Config.option) }).pipe(
     Config.map((flags) => Option.getOrElse(flags.enabled, () => flags.experimental)),
   )
+const ocxEnabled = Config.succeed(true)
 
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("OPENCODE_AUTO_SHARE"),
@@ -54,6 +55,24 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalNativeLlm: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
   experimentalWebSockets: bool("OPENCODE_EXPERIMENTAL_WEBSOCKETS"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
+  ocxPipeline: ocxEnabled,
+  ocxWorkGraph: ocxEnabled,
+  ocxVerifyLadder: ocxEnabled,
+  ocxReviewEnvelope: ocxEnabled,
+  ocxFlakeGate: ocxEnabled,
+  ocxAdrStore: ocxEnabled,
+  ocxStrongReviewer: Config.string("OPENCODE_STRONG_REVIEWER").pipe(
+    Config.withDefault(""),
+    Config.map((value) => value.trim() || undefined),
+  ),
+  ocxPractices: ocxEnabled,
+  ocxPatchSelection: ocxEnabled,
+  contextEnabled: Config.boolean("OPENCODE_CONTEXT_ENABLED").pipe(Config.withDefault(true)),
+  contextAgentRetrieval: Config.boolean("OPENCODE_CONTEXT_AGENT_RETRIEVAL").pipe(Config.withDefault(true)),
+  contextIncidentalUpdates: Config.boolean("OPENCODE_CONTEXT_INCIDENTAL_UPDATES").pipe(Config.withDefault(true)),
+  contextFreshnessChecks: Config.boolean("OPENCODE_CONTEXT_FRESHNESS_CHECKS").pipe(Config.withDefault(true)),
+  contextOwnerRoutingHints: Config.boolean("OPENCODE_CONTEXT_OWNER_ROUTING_HINTS").pipe(Config.withDefault(true)),
+  contextSemanticSearch: Config.boolean("OPENCODE_CONTEXT_SEMANTIC_SEARCH").pipe(Config.withDefault(false)),
 }) {}
 
 export type Info = Context.Service.Shape<typeof Service>
@@ -68,7 +87,18 @@ export const layer = (overrides: Partial<Info> = {}) =>
     Service,
     Effect.gen(function* () {
       const flags = yield* Service
-      return Service.of({ ...flags, ...overrides })
+      return Service.of({
+        ...flags,
+        ...overrides,
+        ocxPipeline: overrides.ocxPipeline ?? true,
+        ocxWorkGraph: overrides.ocxWorkGraph ?? true,
+        ocxVerifyLadder: overrides.ocxVerifyLadder ?? true,
+        ocxReviewEnvelope: overrides.ocxReviewEnvelope ?? true,
+        ocxFlakeGate: overrides.ocxFlakeGate ?? true,
+        ocxAdrStore: overrides.ocxAdrStore ?? true,
+        ocxPractices: overrides.ocxPractices ?? true,
+        ocxPatchSelection: overrides.ocxPatchSelection ?? true,
+      })
     }),
   ).pipe(Layer.provide(emptyConfigLayer))
 

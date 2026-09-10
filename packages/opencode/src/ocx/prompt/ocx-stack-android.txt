@@ -1,0 +1,20 @@
+=== ANDROID & AOSP ADAPTER ===
+
+- In-Tree Ground Truth: In AOSP and Android platform code, follow checked-in `Android.bp` (Soong), `Android.mk`, Gradle modules, and AIDL/HIDL interface definitions.
+- Interface & HAL Stability: Keep AIDL, HIDL, and Binder IPC interfaces versioned and backward-compatible. Never change a published interface without preserving compatibility.
+- Lifecycle & Scopes: Tie async work to structured coroutine scopes (`viewModelScope`, `lifecycleScope`) or platform handlers. Clean up listeners on destroy.
+- State Restoration: Handle process loss, orientation change, and recreation explicitly using `SavedStateHandle` or bundle state.
+- Binder & Memory Constraints: Avoid large payloads in Binder transactions (1MB limit); stream large data via ashmem or pipes.
+- Android Performance Research & Profiling:
+  * Perfetto / Systrace Analysis: Trace jank and frame drops across Choreographer and RenderThread. Target 120Hz/60Hz VSYNC deadlines (16.6ms / 8.3ms frame budget).
+  * Binder IPC Latency: Identify blocking Binder calls on the main thread; convert synchronous IPC to `oneway` async transactions where return values are unneeded.
+  * Memory & LMKD (Low Memory Killer): Optimize RSS and memory footprints; avoid rapid allocation churn that triggers ART concurrent GC pauses.
+  * Native / NDK & JNI Boundaries: Keep JNI boundary transitions minimal; pin memory buffers across JNI rather than copying arrays in critical paths.
+- Material 3 Expressive (M3E) Standards: Use Material 3 Expressive and Google Sans Flex by default.
+  * Do NOT treat M3 Expressive as legacy flat M3. M3 Expressive uses dynamic high-contrast color harmonies, expressive shapes, and fluid spring physics.
+  * Typography: Google Sans Flex with dynamic optical sizing, bold display headlines (700/800 weight), and tight tracking for large type.
+  * Color & Elevation: High-contrast primary/tertiary container pairs instead of washed-out pastels. Pair tonal elevation with subtle ambient shadows.
+  * Shapes: Asymmetrical, organic 24dp-32dp rounded containers, capsule pill FABs, split-action buttons, and morphing bottom sheets.
+  * Motion: Expressive spring curves (`cubic-bezier(0.2, 0, 0, 1)`) with scale-press feedback (0.96 scale down on tap).
+- Accessibility & State Completeness: 48dp minimum touch targets, proper focus traversal, semantic content descriptions, and explicit modeling of loading, empty, error, offline, and permission states.
+- Verification: Test across screen sizes, large typography, dark theme, configuration changes, rotation, process death, and permission denials.

@@ -263,6 +263,28 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  each("asks for build approval before a Bazel command", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const error = new Error("stop after build approval")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(yield* fail({ command: "bazel test //..." }, capture(requests, error))).toMatchObject({
+            message: error.message,
+          })
+          expect(requests).toHaveLength(1)
+          expect(requests[0]?.permission).toBe("build")
+          expect(requests[0]?.patterns).toEqual(["bazel test //..."])
+          expect(requests[0]?.metadata).toMatchObject({
+            reason: "build-backed command requires explicit user approval",
+          })
+        }),
+      )
+    }),
+  )
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
@@ -978,12 +1000,13 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const err = new Error("stop after permission")
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          expect(yield* fail({ command: "echo test > output.txt" }, capture(requests, err))).toMatchObject({
+          const command = "echo test > /tmp/output.txt"
+          expect(yield* fail({ command }, capture(requests, err))).toMatchObject({
             message: err.message,
           })
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
-          expect(bashReq!.patterns).toContain("echo test > output.txt")
+          expect(bashReq!.patterns).toContain(command)
         }),
       )
     }),

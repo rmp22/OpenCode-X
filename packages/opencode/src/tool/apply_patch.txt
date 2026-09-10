@@ -31,3 +31,5 @@ It is important to remember:
 
 - You must include a header with your intended action (Add/Delete/Update)
 - You must prefix new lines with `+` even when creating a new file
+- NEVER add explanatory code comments (such as `// explain code`, `/* ... */`, `# comments`) to patched code unless explicitly requested by the user.
+- NEVER use inline fully qualified names (such as `java.util.List`, `android.util.Log`, `org.springframework.http.ResponseEntity`) in Java, Kotlin, etc. Add the proper import statement at the top of the file and use simple names. If disambiguating a collision, prefer an import alias if supported (e.g. in Kotlin); inline FQNs are only permitted as an unavoidable last resort in Java when collisions cannot be aliased.

@@ -1,0 +1,22 @@
+---
+name: testing-doctrine
+description: Use tests as executable evidence for behavior, boundaries, and failure recovery.
+signals: test, tests, typecheck, lint, build, failure, flaky, verify
+globs: **/*.test.ts, **/*.spec.ts, **/test_*.py, **/*_test.go
+sources:
+- https://www.sqlite.org/testing.html | 2026-08-28
+- https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html | 2026-08-28
+---
+## Rules
+- Name the behavior the test proves and the defect that would fail it.
+- Cover malformed input, denied work, timeouts, cleanup, and boundary values when relevant.
+- A green command is evidence only for the code and state it actually exercised.
+- Keep test setup close to the real production path and avoid mock-only proof.
+- Treat flaky or rerun-green results as unresolved until the cause is checked.
+
+## Example
+When a command fails then passes unchanged, inspect the mutation history before accepting the second result.
+
+## Sources
+- https://www.sqlite.org/testing.html (2026-08-28)
+- https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html (2026-08-28)

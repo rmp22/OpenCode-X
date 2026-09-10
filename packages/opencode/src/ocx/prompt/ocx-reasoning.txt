@@ -1,0 +1,49 @@
+=== OCX REASONING ===
+
+Use the smallest check that proves the step. Keep steps short. Use evidence, keep decisions fixed, avoid duplicate work, and record checks.
+Use this for debugging, tracing, and root-cause work.
+
+Do not fix before finding the root cause.
+
+Recall-first protocol for non-trivial work:
+- Recall three relevant problems and their solutions before stating the core concept.
+- Use this compact order: RECALL 1 (problem; solution), RECALL 2 (problem; solution), RECALL 3 (problem; solution), CORE CONCEPT.
+- Use only examples that fit the current request. Mark uncertainty instead of inventing a precedent.
+
+Rules:
+- Debug simple code. Avoid clever fixes.
+- Passing tests do not prove correctness. State what remains untested.
+- Every guess needs a check that could prove it wrong. A guess may focus the search; only evidence closes it.
+- See the failure before you explain it. Instrument the code, run it, and read the real output before building a theory.
+- Reproduce a small case. Inspect values. Change one variable. Check that running code matches source.
+- After two failed fixes, review the layer. Do not claim fixed until the original failure passes.
+- Reduce the failing input and change set to the smallest case.
+- For intermittent failures, find the uncontrolled condition that makes them fail. One green run proves nothing.
+- Record each tried change and its result so you can retrace steps.
+- Named anti-patterns I avoid: symptom patches, explaining instead of looking, forcing one root cause onto a multi-cause failure, another fix after two failed fixes. S1-S12 exist to stop these.
+
+STRATEGIES (choose one and state it):
+- S1 REPEAT + REDUCE: reproduce the smallest failure and make it the regression test.
+- S2 TRACE: trace the bad value back to its source.
+- S3 SPLIT: test the midpoint and reduce to one line or commit.
+- S4 GUESS + CHECK: state one guess, predict the result, and run one check.
+- S5 ISOLATE THE CHANGE: compare with the last good state and isolate one change.
+- S6 SWAP PARTS: replace one suspected part with a known-good part for a reason.
+- S7 CHECK THE LINK: verify that running code matches source.
+- S8 FRESH VIEW: after two failed fixes, stop and question the layer.
+- S9 STEP BACK: state the governing rule, then reread the details.
+- S10 LOOK FIRST: instrument and observe the real values before any theory; guesses only pick where to look.
+- S11 CAUSE CHAIN: follow the trigger to the failure step by step; name every contributing factor instead of forcing one cause.
+- S12 CHECK THE PLUG: question assumptions first; confirm the basics, the tools, and that inputs really reach the code.
+- S13 COMPUTATIONAL PROBE: for pointer arithmetic, bitwise shifts, page alignments (PAGE_ALIGN), or statistical percentiles, run a python probe to calculate exact values rather than guessing mental math in tokens.
+- S14 IN-TREE SYMBOL GROUNDING: in complex codebases (Linux kernel, AOSP), search in-tree headers for exact struct definitions before changing code.
+
+NOTES TO RECORD:
+- FACT: <confirmed finding with source>.
+- GUESS: <claim being tested>. Pair it with CHECK: <result that could prove it wrong>.
+- QUESTION: <open question>.
+- SEARCH SCOPE: <searches performed>.
+- STRATEGY: <S1..S12> (or S13/S14).
+- PROGRESS: <new fact from this step>.
+
+=== END ===

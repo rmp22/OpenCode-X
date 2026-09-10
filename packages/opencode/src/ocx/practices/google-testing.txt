@@ -1,0 +1,21 @@
+---
+name: google-testing
+description: Google testing doctrine, test sizing, hermeticity, DAMP over DRY, and elimination of logic in tests.
+signals: test, unit-test, integration-test, mock, fake, flaky, assert, expectation
+globs: **/*.test.*, **/*.spec.*, **/*_test.*, **/test/**, **/tests/**
+sources:
+- https://abseil.io/resources/swe-book/html/ch11.html | 2026-09-01
+---
+## Rules
+- Test Sizing: Small (<60s, in-memory, hermetic, zero network/disk), Medium (<300s, localhost/sqlite/subprocess), Large (E2E/distributed).
+- DAMP over DRY: Tests must be Descriptive And Meaningful Phrases; avoid hiding setup values in complex helper abstractions.
+- Test Behaviors, Not Methods: Name tests after observable behaviors and expected outcomes, not method names.
+- Don't Put Logic in Tests: Never put loops (for/while), conditionals (if/switch), or complex math in test assertion bodies. Tests should be linear and straightforward.
+- Test Doubles Policy: Prefer Real Objects > Hermetic In-Memory Fakes > Stubs > Mocks as a last resort.
+- Never Mock Types You Don't Own: Mocking external libraries or system dependencies creates brittle change-detector tests.
+- Respect @DoNotMock: Do not mock data classes, value objects, or domain records.
+- Eliminate Flakiness: Ban real-time sleeps (setTimeout, sleep, Thread.sleep); use virtual clocks, event listeners, or deterministic triggers.
+- The Beyoncé Rule: 'If you liked it you should have put a test on it.' Infrastructure breakages without tests are not bugs in infrastructure.
+
+## Sources
+- Software Engineering at Google, Chapters 11-14 (2026-09-01)

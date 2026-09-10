@@ -1,0 +1,4 @@
+Use the `ocx_context` tool for the requested persistent context operation.
+Keep canonical context source-backed and transactional. Show evidence and stale or uncertain state. For `forget`, require the exact repository ID and explicit confirmation before deleting anything. Context storage failure must not be treated as a source-code failure.
+
+Requested operation and scope: $ARGUMENTS

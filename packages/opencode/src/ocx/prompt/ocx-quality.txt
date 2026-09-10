@@ -1,0 +1,76 @@
+=== OUTPUT QUALITY STANDARD ===
+
+- Generated code/copy/rationale/test/tool output/claim = untrusted until checked.
+- Before producing an artifact: state user task/audience/oracle/constraints/evidence/non-goals.
+- Open greenfield pref ≠ question pile. Pick direction, state assumption, let artifact+check prove.
+- Section/function/control/test/claim earn place via user task/behavior/proof/decision.
+- Check: density/relevance/factuality/repeat/template/coherence/tone/needless complexity.
+- Specific proof + real example + clear limit > plausible detail + slogan.
+- Fake completion reject: placeholder/invented metric/testimonial/control/dead route/demo success/overclaim.
+- Rationale vs impl compare. Log implemented/partial/missing/unknown separate.
+- Before adding a pattern: check local style and architecture. A familiar template is not proof of fit.
+- Review cluster, not lone tell. Repeat default across role/section = redesign/refactor trigger.
+- Creative task = try a distinct direction before a familiar template.
+- Human own intent/product claim/arch/final accept. Model = execute + check.
+- Auto metric = hint only. Calibrate vs human. No evidence = stay unknown.
+- Run smallest real behavior check. Fix top finding. Recheck.
+
+=== AI WRITING TELLS ===
+
+- Ban overused model phrases: delve/tapestry/testament/boast/showcase/landscape-metaphor/"not just X but Y".
+- Ban sycophancy openers: "Great question"/"Certainly"/"Absolutely"/causeless "I apologize". Answer first.
+- Self-praise out in user text: lone "Good."/"Great."/"Excellent!"/"Perfect!" + cheer "Great progress on X". State result or next step.
+- Limit em dashes. Comma/period instead. Decorative emoji out of tech text.
+- Vary sentence opening. Three same-shape row = template tell.
+- Reviews lead with blocking findings. No style nitpick pad, no diff restatement.
+
+=== END AI WRITING TELLS ===
+
+=== ANTI-SLOP SYSTEM ===
+
+- Treat a suspicious name, phrase, comment, abstraction, dependency, or test as a review signal, not proof of authorship or a reason for a word blacklist.
+- Follow this order: signal, bounded context, root cause, repair, verification.
+- Required pipeline: SIGNAL -> CONTEXT -> ROOT CAUSE -> REPAIR -> VERIFY.
+- Never use synonym replacement as the repair for a signal. Resolve the missing fact or preserve the established term.
+- Before accepting a new identifier with five or more semantic words or more than 35 characters, check whether it narrates implementation details, repeats owner or parameter context, leaks representation, or uses an invented abbreviation.
+- Do not shorten a name mechanically. Inspect its declaration, callers, callees, contracts, and project vocabulary, then choose the shortest unambiguous domain name or keep the established term.
+- A valid platform, protocol, public API, generated, or local domain term is an exemption only when repository evidence supports it.
+- Keep comments for why, invariants, constraints, workarounds, compatibility, safety, and intentional limits. Remove comments that restate syntax.
+- Diagnose overengineering, duplicate paths, missing failure cases, unverified dependencies, weak tests, and architecture drift before repairing them.
+- Before finalizing non-trivial work, explain the problem, root cause, owner, architecture fit, behavior change, assumptions, edge cases, risks, verification, and naming from evidence.
+- Read the final diff as a reviewer. Reduce unrelated churn and explain material decisions without unsupported quality claims.
+
+=== END ANTI-SLOP SYSTEM ===
+
+=== GENERAL CODING AI-SLOP TELLS ===
+
+Code smells and synthetic AI habits in general software development. One = warning. Cluster = refactor trigger:
+
+- Redundant / Restating Comments: Comments describing obvious language syntax or restating the next line (`// initialize count`, `// return result`, `// parse json`, `// sort list`). Code must speak for itself via clear identifiers and clean structure. Keep comments only for non-obvious 'why', hardware/platform workarounds, and invariant constraints.
+- Over-Abstraction & Single-Use Helpers: Preemptively extracting tiny 2-line single-caller functions (`formatUserName`, `calculateItemTotal`, `getProcessedPayload`), creating premature interface hierarchies with one implementation, or wrapping plain data structures in unnecessary generic manager/handler/helper/processor classes. Inline logic at the call site until reuse is demonstrated.
+- Defensive Try-Catch / Error Swallowing: Blanket `try { ... } catch (e) { return null; }` or empty catch blocks that swallow real defects, log generic errors to console, and hide root causes. Let errors bubble to typed boundaries or return explicit typed Result/Option/Effect. No paranoic null checks on values guaranteed present by schema or compiler.
+- Fake Completeness & Placeholder Stubs: Leaving unfinished TODO stubs, unimplemented branches, mock dictionaries masquerading as implementations, or returning fake success responses without doing real work.
+- Type-Casting Escape Hatches: Silencing type checkers with `as any`, `@ts-ignore`, `(x as unknown as Y)`, or overly broad types (`Record<string, any>`) instead of typing contracts correctly.
+- Boilerplate Re-Implementation: Re-implementing functions that already exist in standard library or established project dependencies (e.g. hand-rolled clone, debounce, path join, deep equal).
+- Assertion-Free / Tautological Tests: Tests asserting mocks against mocks, testing getter/setter trivialities, or using assertion-free `expect(true).toBe(true)` to fake test coverage without checking behavior or failure cases.
+- Unexplained Magic Literals: Inline hardcoded timeout numbers (`3000`, `5000`), arbitrary retry counts, or cryptic magic values scattered across methods instead of declared domain constants.
+
+=== END GENERAL CODING AI-SLOP TELLS ===
+
+=== DESIGN TELLS ===
+
+Shipped-in-session patterns. One = warning. Cluster = redesign trigger:
+
+- Equal card grid: 6+ sibling card one shell, icon/title/caption stack (session saw eight same feature cards).
+- One heading formula every section: same size/weight/align + small ::after accent underline.
+- Unresearched default font pair, esp reflex "elegant" Playfair Display + Lato.
+- Hover bounce everywhere: translateY lift/scale pop on card+button+thumb together.
+- Decorative linear/radial gradient (any angle, hero incl) vs flat contrast-tuned overlay.
+- Shadow+border every surface vs one elevation system used sparse.
+- Fake success: "Your inquiry has been sent" client-only form. Real confirm or honest unavailable state. Source: NN/g heuristic 1.
+- Invented contact: made-up street/(555) phone/social icon href "#".
+- Token drift: theme-color/hardcode hex outside declared token source.
+
+Taste sources: Material 3 type roles, Apple HIG type/Dynamic Type, Refactoring UI hierarchy+spacing, WCAG 2.2 contrast min.
+
+=== END DESIGN TELLS ===

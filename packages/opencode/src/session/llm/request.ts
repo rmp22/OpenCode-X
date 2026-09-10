@@ -9,7 +9,8 @@ import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
-import PROMPT_ENGLISH from "../prompt/ocx-english.txt"
+import { violationReminders } from "@/ocx/violation-reminder"
+import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
@@ -17,6 +18,9 @@ import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
+
+const STYLE_REMINDER =
+  "Use clear, concise technical English. Answer the task directly. Avoid filler."
 
 type PrepareInput = {
   readonly user: SessionV1.User
@@ -60,13 +64,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     mode: input.agent.mode,
     hidden: input.agent.hidden,
     small: input.small,
+    pipeline: input.flags.ocxPipeline,
   })
+  const violations = violationReminders(Global.Path.data)
   const content = [
     ...(input.agent.prompt ? [input.agent.prompt] : []),
-    ...ocxPrompt.filter((prompt) => prompt !== PROMPT_ENGLISH),
+    ...ocxPrompt,
     ...input.system,
     ...(input.user.system ? [input.user.system] : []),
-    PROMPT_ENGLISH,
+    STYLE_REMINDER,
+    ...(violations.length ? ["Most-broken rules on this install:", ...violations.map((line) => `- ${line}`)] : []),
   ]
     .filter((x) => x)
     .join("\n")
@@ -153,9 +160,6 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
 
   const tools = resolveTools(input)
-  // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
-  // on every function tool so MCP-sourced and dynamic schemas that don't
-  // satisfy OpenAI's structured-outputs constraints still register.
   if (
     input.model.api.npm === "@ai-sdk/openai" ||
     input.model.api.npm === "@ai-sdk/azure" ||
@@ -168,7 +172,6 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     Object.keys(tools).length === 0 &&
     hasToolCalls(input.messages)
   ) {
-    // Copilot needs a tools field when replaying prior tool calls, even if no tools are currently enabled.
     tools["_noop"] = aiTool({
       description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
       inputSchema: jsonSchema({

@@ -14,6 +14,10 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { MutationGuard } from "@/ocx/mutation-guard"
+import { OCXOperation } from "@/ocx/operation"
+import { SanityChecker } from "@/ocx/sanity"
+import { defaultSearchCache } from "@/ocx/search/cache"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -36,12 +40,16 @@ export const WriteTool = Tool.define(
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
-        Effect.gen(function* () {
+        OCXOperation.observe(
+          { sessionID: ctx.sessionID, operation: "patch" },
+          Effect.gen(function* () {
           const instance = yield* InstanceState.context
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(instance.directory, params.filePath)
-          yield* assertExternalDirectoryEffect(ctx, filepath)
+          const mutationViolation = MutationGuard.check(ctx.messages, instance.worktree, [filepath], ctx.extra?.mutationContext as MutationGuard.Context | undefined)
+          if (mutationViolation) throw new Error(`${mutationViolation.rule}: ${mutationViolation.message}`)
+           yield* assertExternalDirectoryEffect(ctx, filepath, { operation: "write" })
 
           const exists = yield* fs.existsSafe(filepath)
           const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
@@ -66,12 +74,19 @@ export const WriteTool = Tool.define(
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
+          defaultSearchCache.invalidate(instance.directory)
           yield* events.publish(Watcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",
           })
 
           let output = "Wrote file successfully."
+          const sanity = SanityChecker.checkSanity(
+            filepath,
+            contentNew,
+            exists ? { previousContent: contentOld } : undefined,
+          )
+          if (sanity.notice) output += `\n\n${sanity.notice}`
           yield* lsp.touchFile(filepath, "document")
           const diagnostics = yield* lsp.diagnostics()
           const normalizedFilepath = FSUtil.normalizePath(filepath)
@@ -98,7 +113,8 @@ export const WriteTool = Tool.define(
             },
             output,
           }
-        }).pipe(Effect.orDie),
+          }).pipe(Effect.orDie),
+        ),
     }
   }),
 )

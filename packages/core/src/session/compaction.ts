@@ -18,22 +18,25 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 ## Objective
 - [one or two brief sentences describing what the user is trying to accomplish]
 
+## Hard Invariants & Constraints
+- [exact user constraints: e.g. target directory, external library permissions, local asset rules, negative rules ("do not touch X")]
+
 ## Important Details
-- [constraints/preferences, decisions and why, important facts/assumptions, exact context needed to continue, or "(none)"]
+- [decisions made and rationale, established types/APIs, discovered facts, or "(none)"]
 
 ## Work State
 ### Completed
-- [finished work, verified facts, or changes made; otherwise "(none)"]
+- [finished work, verified targets on disk, or passing checks; otherwise "(none)"]
 
 ### Active
-- [current work, partial changes, or investigation state; otherwise "(none)"]
+- [active workstream and step name, current file targets, partial changes; otherwise "(none)"]
 
 ### Blocked
-- [blockers, failing commands, or unknowns; otherwise "(none)"]
+- [exact compiler/test error string, missing dependencies, or open questions; otherwise "(none)"]
 
 ## Next Move
-1. [immediate concrete action, or "(none)"]
-2. [next action if known, or "(none)"]
+1. [immediate concrete next action; otherwise "(none)"]
+2. [following step if known; otherwise "(none)"]
 
 ## Relevant Files
 - [file or directory path: why it matters, or "(none)"]
@@ -43,6 +46,7 @@ Rules:
 - Keep every section, even when empty.
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
+- Never omit hard user constraints or negative instructions from the original prompt.
 - Do not mention the summary process or that context was compacted.`
 
 type Entry = {

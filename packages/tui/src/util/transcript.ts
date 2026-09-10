@@ -1,12 +1,14 @@
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "./locale"
 import * as Model from "./model"
+import { stripAttentionTags } from "../ocx/text"
 
 export type TranscriptOptions = {
   thinking: boolean
   toolDetails: boolean
   assistantMetadata: boolean
   providers?: Provider[]
+  leadingOcxEntries?: Array<{ kind?: string; value: string; summary?: string; state?: string; detail?: string }>
 }
 
 export type SessionInfo = {
@@ -21,6 +23,32 @@ export type SessionInfo = {
 export type MessageWithParts = {
   info: UserMessage | AssistantMessage
   parts: Part[]
+  ocxEntries?: Array<{
+    kind?: string
+    value: string
+    summary?: string
+    state?: string
+    detail?: string
+  }>
+}
+
+export function formatOcxEntry(entry: { kind?: string; value: string; summary?: string; state?: string; detail?: string }): string {
+  const isAudit = entry.kind === "audit" || /^entering audit phase\b/i.test(entry.value)
+  const isPlaybook = /playbook/i.test(entry.value) || /playbook/i.test(entry.summary ?? "") || entry.kind === "playbook"
+  const isWorkflow = entry.kind === "workflow"
+  const isPhase = entry.kind === "phase"
+  const icon = entry.state === "completed" ? "✓" : entry.state === "failed" || entry.state === "blocked" ? "!" : "·"
+
+  let label = entry.summary ? `${entry.value} ${entry.summary}` : entry.value
+  if (isWorkflow) {
+    label = `Workflow: ${label}`
+  } else if (isPhase) {
+    label = `Phase: ${label}`
+  }
+  const prefix = isPlaybook || isWorkflow || isPhase ? "◈ " : ""
+  const detail = entry.detail ? `\n  ${entry.detail}` : ""
+  if (isAudit) return `_[OCX] Audit_${detail || `\n  ${entry.value}`}\n\n`
+  return `_${icon} ${prefix}${label}_${detail}\n\n`
 }
 
 export function formatTranscript(
@@ -35,8 +63,16 @@ export function formatTranscript(
   transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n`
   transcript += `---\n\n`
 
+  if (options.leadingOcxEntries && options.leadingOcxEntries.length > 0) {
+    transcript += `## Session Initialization\n\n`
+    for (const entry of options.leadingOcxEntries) {
+      transcript += formatOcxEntry(entry)
+    }
+    transcript += `---\n\n`
+  }
+
   for (const msg of messages) {
-    transcript += formatMessage(msg.info, msg.parts, options, providers)
+    transcript += formatMessage(msg.info, msg.parts, options, providers, msg.ocxEntries)
     transcript += `---\n\n`
   }
 
@@ -48,6 +84,13 @@ export function formatMessage(
   parts: Part[],
   options: TranscriptOptions,
   providers?: Provider[] | ReadonlyMap<string, Provider>,
+  ocxEntries?: Array<{
+    kind?: string
+    value: string
+    summary?: string
+    state?: string
+    detail?: string
+  }>,
 ): string {
   let result = ""
 
@@ -55,6 +98,11 @@ export function formatMessage(
     result += `## User\n\n`
   } else {
     result += formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
+    if (ocxEntries && ocxEntries.length > 0) {
+      for (const entry of ocxEntries) {
+        result += formatOcxEntry(entry)
+      }
+    }
   }
 
   for (const part of parts) {
@@ -83,12 +131,14 @@ export function formatAssistantHeader(
 
 export function formatPart(part: Part, options: TranscriptOptions): string {
   if (part.type === "text" && !part.synthetic) {
-    return `${part.text}\n\n`
+    return `${stripAttentionTags(part.text)}\n\n`
   }
 
   if (part.type === "reasoning") {
     if (options.thinking) {
-      return `_Thinking:_\n\n${part.text}\n\n`
+      const topic = (part.metadata as any)?.ocx?.topic
+      const header = topic ? `_Thought: ${topic}_` : `_Thinking:_`
+      return `${header}\n\n${part.text}\n\n`
     }
     return ""
   }

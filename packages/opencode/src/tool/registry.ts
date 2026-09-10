@@ -17,9 +17,8 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { StrategyTool } from "./strategy"
-import { StructureTool } from "./structure"
-import { AuditTool } from "./audit"
-import { DesignTool } from "./design"
+import { AssetTool } from "./asset"
+import { RenderTool } from "./render"
 import { YoutubeTranscriptTool } from "./youtube-transcript"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
@@ -29,6 +28,7 @@ import { Schema } from "effect"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
+import { Git } from "@/git"
 
 import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
@@ -59,6 +59,9 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
+import { Codebase } from "@/ocx/codebase/service"
+import { CodebaseTool } from "@/ocx/codebase/tool"
+import { ContextTool } from "@/ocx/context/tool"
 
 export function webSearchEnabled(_providerID: ProviderV2.ID, _flags = { exa: false, parallel: false }) {
   return true
@@ -115,10 +118,11 @@ const layer = Layer.effect(
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const strategytool = yield* StrategyTool
-    const structuretool = yield* StructureTool
-    const audittool = yield* AuditTool
-    const designtool = yield* DesignTool
+    const assettool = yield* AssetTool
+    const rendertool = yield* RenderTool
     const youtubeTranscript = yield* YoutubeTranscriptTool
+    const codebase = yield* CodebaseTool
+    const context = yield* ContextTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -225,10 +229,11 @@ const layer = Layer.effect(
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           strategy: Tool.init(strategytool),
-          structure: Tool.init(structuretool),
-          audit: Tool.init(audittool),
-          design: Tool.init(designtool),
+          asset: Tool.init(assettool),
+          render: Tool.init(rendertool),
           youtubeTranscript: Tool.init(youtubeTranscript),
+          codebase: Tool.init(codebase),
+          context: Tool.init(context),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -253,10 +258,11 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.strategy,
-            tool.structure,
-            tool.audit,
-            tool.design,
+            tool.asset,
+            tool.render,
             tool.youtubeTranscript,
+            tool.codebase,
+            tool.context,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -462,6 +468,8 @@ export const node = LayerNode.make({
     Truncate.node,
     RuntimeFlags.node,
     MCP.node,
+    Codebase.node,
+    Git.node,
     Database.node,
     Ripgrep.node,
   ],

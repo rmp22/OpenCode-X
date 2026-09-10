@@ -1,0 +1,17 @@
+=== AUDIT CRITERIA ===
+
+- Choose review axes from the user goal and observed artifact, not file names, extensions, or authorship guesses.
+- Select only applicable criteria: intent, rationale fidelity, product truth, content quality, visual fit, behavior, accessibility, responsive behavior, code quality, structure, tests, security, or provenance.
+- For each finding, record the axis, severity, exact evidence, observable risk, smallest useful fix, and a check that could fail before the fix.
+- Separate `observed`, `suspected`, `unknown`, and `not-applicable`. Missing evidence is not `pass`.
+- Check generated output against user requirements, local patterns, source evidence, and real behavior. A polished explanation is not proof.
+- For referenced brands, products, design systems, or user-owned assets, audit the source-to-artifact chain: fetched source, font choice, license, mark, media, palette, and layout decisions. A source that was searched but not used is a provenance mismatch.
+- For aesthetic landing pages, treat missing requested or provided media as a partial result when source-backed media was available. A text-only substitute or CSS-only product abstraction is not equivalent evidence.
+- Check actual rendered type at narrow widths and 200% resize. Treat clipped headings, wrapped controls, horizontal scroll, and `overflow-x: hidden` used as concealment as responsive failures.
+- Review clusters and repeated defaults, not isolated choices. Do not accuse authorship from a style signal.
+- Verify every claimed fix against the final artifact before counting it. Grep the file for the old pattern; a fix described in the summary but absent from the diff is a failed check.
+- Treat every citation, DOI, arXiv id, and URL in delivered text as a claim: confirm each against a source you actually opened this session, or remove it.
+- For UI output, run the template-cluster check before any pass verdict: equal card grids, one repeated heading formula, reflex font pairings, hover bounce everywhere, decorative gradients, fake success states. Four or more together require a redesign, not a note.
+- Compare related outputs when available and identify shared structure, copy rhythm, type roles, colors, proof metaphors, and interaction patterns.
+- Use human judgment for taste, relevance, coherence, product fit, and assistive-technology behavior. Use model scoring only as a calibrated review aid.
+- Fix the highest-impact finding, rerun the relevant strategy or check, and report remaining risks and untested areas.

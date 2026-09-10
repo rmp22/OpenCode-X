@@ -1,0 +1,197 @@
+=== UI DESIGN CORE ===
+
+- Start = user job + one main action + one visual idea.
+- Before code, record audience/task/content/states/references/shared tokens.
+- Multi-section HTML/frontend: exact file tree + ownership table before code. Root entry = shell only. Detail + mechanism rules = WEB STRUCTURE RULES section below.
+- File tree/module boundary/dep direction/behavior-preserve check = acceptance criteria. No unloaded fragment. No caller-less file.
+- Progressive enhancement = default: first viewport + primary action + core proof exist before JS. JS enhances only, never serves as the sole path to content.
+- Separate research/direction/build/review. Vague visual work = study human guide + LLM/anti-slop critique via `websearch`/`webfetch`/`youtube-transcript` when useful.
+- Community advice = example ≠ proof. Separate user research/design-system guidance/model research/anecdote.
+- First generated page = draft. After code: inspect artifact section-by-section, name three most-generic choice, fix, re-audit.
+- Earlier model output/session log exists = compare before picking a direction. Change page structure/section pacing/main visual, not just title/color.
+- Existing UI work = requirements bar before editing: what stays/may change/may break/how judged. No habit preserve. No surprise replace.
+- Layout style fit content: editorial/product/data/commerce/gallery/utility/spatial.
+- One display type + one reading type. Real brand mark + real product media.
+- Editorial label ≠ product direction substitute. Field-note/flight-log/chapter/specimen-tag/route-map/ops-memo/source-badge need real user task + evidence.
+- Named brand = official mark or stated asset limit. Never redraw wordmark w/ ordinary text.
+- Hierarchy build w/ type/scale/alignment/density/one focal point per view.
+- Max two large/high-contrast focal per viewport unless task require more. All emphasized = reduce hierarchy.
+- Squint test merged into TYPE AND LAYOUT DISCIPLINE below.
+- Section = different job. No repeat centered text/equal card/same spacing.
+- Section = unique job + proof + action-or-state. Repeat fact/metric/image/CTA = merge or remove.
+- Shortest page completing user job. Extra section/rail/chart/map/stat/motion for interest-only/checklist-only = out.
+- Known brand guide type/color/mark/image/cue.
+- Weak/vague brief = covered by UI HARD GATES direction rule above.
+- Still image first. Page work without motion.
+- Design explanation ≠ trust. Compare promise vs rendered artifact + working interaction.
+- Review structure/styling/behavior separate. Test main task/cross-screen consistency/mobile/contrast/focus/error/empty/zoom/reduced-motion.
+- Both reading direction support: set `lang`+`dir`, logical CSS property, real RTL locale w/ mixed-direction text test, not EN-LTR only.
+- Reject fake proof/generic benefit/copied template/any-product-page structure.
+
+PRE-SHIP TASTE CHECK
+Run in order before the screen is done. Each item = checkable rule + source:
+
+1. Type role: one display role, one reading role, optional mono code-only. Size from named scale (5-8 step), web body >= 16px. Source: Material 3 type roles.
+2. Spacing system: value from one scale; group-around > group-inside space. No arbitrary pixel. Source: Refactoring UI spacing.
+3. Hierarchy: weight+color together w/ size, not size alone. One focal per viewport. Source: Refactoring UI hierarchy.
+4. Contrast: body 4.5:1 min, large text+control 3:1, tool-checked not eye. Source: WCAG 2.2 contrast min.
+5. Text resilience: 200% text size no clip/no horizontal scroll; crowded row stack at accessibility size. Source: Apple HIG Dynamic Type.
+6. Honest status: success/loading/error/empty show what actually happen. Fake confirmation never. Source: NN/g heuristic 1.
+7. Section variety: no two section same job+layout; repeat heading formula + decorative underline = template tell.
+8. Interaction truth: every visible control reach real handler/destination; dead "#" link + demo success = blocker.
+9. Token discipline: color/radius/shadow/type from declared token; meta theme-color match them.
+10. Fixed overlay: scroll rendered page w/ each fixed/sticky bar/banner/cookie-notice/floating-button present; confirm no cover of content/focus ring/tap target at any scroll position. Source: NN/g heuristic 1.
+11. Banned-pattern scan: output gate over HTML/CSS/JS/summary copy. Zero unjustified hit before ship.
+
+TYPE AND LAYOUT DISCIPLINE (measured, not vibes)
+- Publish type ramp before markup: display/h1/h2/h3/body/caption, one ratio (1.2-1.333). Every rendered size from ramp; ad-hoc size = drift.
+- Headline hierarchy need weight/form contrast, not size alone. Five identical centered 40px semibold h2 = AI tell. Vary composition: one left-align, one oversized, one different kicker treatment.
+- Centered-everything = slop: max one centered section per viewport. Body text never centered.
+- Line length measure: body paragraph 45-75ch. Rendered wider than 75ch = fail.
+- Section padding from spacing scale; one rhythm value consistent. Random split without scale = drift.
+- Tight letter-spacing = display face only, never body.
+- Squint test on render: every section read identical centered box or equal visual weight = adjust scale/contrast/grouping, remove content, or redesign pacing before ship.
+
+HUMAN DESIGN BASELINE (what good look like; sources below)
+- Visual hierarchy = highest-ROI decision: eye travel headline->subheadline->CTA in one obvious order. Primary CTA = most prominent element by size/color/position. Source: Moydus 15 principles.
+- 95% of web design = typography: type system first, layout second. One personality display face + one readable body face, consistent everywhere; document size/weight/spacing as system before the style section. Sources: onething.design typography guide, Oliver Reichenstein.
+- Whitespace = active element, not leftover: separation create meaning; group related, separate unrelated. Random-feel spacing = read random.
+- Color mean something: one dominant surface family, one action-reserved accent, semantic state never decorated. Award work use contrast+color to guide attention, not decorate background. Source: GraphicDesignJunction award-site study.
+- Layout pattern earn place: F-pattern text-heavy, Z-pattern minimal landing flow, split-screen/oversized-type hero when brand carry it. Pick per content job, not default. Source: Moydus layout comparison.
+- 2026 craft signal used sparse: kinetic/variable-type moment, broken grid, oversized type as layout element. One bold move > five timid. Sources: Envato trends, ReallyGoodDesigns.
+- Performance + accessibility = part of design: LCP < 2.5s, WCAG contrast 4.5:1 body / 3:1 large, keyboard path complete. Beautiful page failing these ≠ production grade. Sources: Inkbot principles, WCAG 2.1 via onething.design.
+- Good design invisible: user notice content + outcome, not decoration. Section exist to look designed rather than inform/act = cut it.
+
+HUMAN MASTERY PRINCIPLES (complete operating guidance)
+
+RAMS TEN — ask each before ship:
+1 Innovative: solve problem way old page cannot; tied to real tech/content opportunity, never decoration-only.
+2 Useful: page enable one task faster/better; detractor cut.
+3 Aesthetic: execution quality show care; daily-use object need quality or tolerance drop.
+4 Understandable: target user explain page purpose after 5s scan.
+5 Unobtrusive: design serve intent, stay background; ego moment rare + earned.
+6 Honest: page promise exactly what product deliver; fake proof/inflated claim/dark pattern = violation.
+7 Long-lasting: trend styling date-stamps page in 12 months; build on surviving structure.
+8 Thorough: nothing almost-done; error copy/focus ring/loading skeleton designed like hero.
+9 Low-waste: light asset, no autoplay sound, efficient image; respect device + data.
+10 As little design as possible: every element pass remove-test ("remove and lose something?" No = remove).
+
+NORMAN DOOR CHECK (affordance/signifier/feedback/mapping/constraint):
+- Affordance = possible action; signifier = visible cue naming it. Pressable look pressable, fillable look fillable, navigable look navigable. Mismatch = lie.
+- Feedback: every action give instant visible response (<100ms press state), result or progress <400ms.
+- Mapping: control position/direction match effect — slider right = more, up = increase, physical analogy kept.
+- Constraint: impossible option hidden, not shown-disabled without reason.
+- Conceptual-model test: cold screenshot, ask "what this button do". Wrong guess = signifier failed = fix element, never add explanation text.
+
+KRUG BAR (Don't Make I Think):
+- Clickable obviously clickable; static obviously static.
+- Omit needless words: half the words keep meaning; welcome blurb gone.
+- User scan, not read: hierarchy survive F-pattern glance.
+- Clue trail always present: where am I (nav state), how deep (breadcrumb on trees), what next.
+- Cold-user bar: main task completable <2 minutes without help text.
+- Testing cadence: one user today > three users next month; test every stage; small iterations.
+
+TUFTE ECONOMY (data-ink thinking):
+- Maximize ink encoding information; erase gridline spam, redundant legend, decoration.
+- Chart junk out: 3D pie, dual-axis without need, gradient-filled bars, shadow-boxed plots.
+- Small multiples beat single mega-graphic for comparison tasks.
+- UI form: border/shadow/icon must group, separate, or signal — else delete.
+
+GESTALT APPLIED:
+- Proximity: near = grouped; between-group gap > inside-group gap.
+- Similarity: same style = same behavior; different behavior = different style, never styled alike.
+- Closure: mind completes partial shapes; safe for marks/logos, never on required-control clarity.
+- Continuity: shared axis guides eye along related items.
+- Figure-ground: modal/scrim layer separation unambiguous; ambiguous stacking = z-index bug.
+- Common region: container/tint claims membership where proximity alone too weak.
+- Prägnanz: ambiguous shape read as simplest form; simple geometry parses fastest.
+
+ALEXANDER ALIVENESS: point at any element, name whose life it eases. No answer = cut.
+EAMES DETAIL RULE: the details are not the details; they make the design. Error copy, focus ring, empty state, easing curve = design itself.
+HARA EMPTY: whitespace is active material. Key element get room equal its weight; crowding communicates panic.
+MATERIAL HONESTY: pressable looks pressable, fillable looks fillable, navigable looks navigable. Material lie = trust leak.
+
+EMOTION AND FAMILIARITY (why users come, stay, tell friends)
+
+WALTER LADDER — verify bottom-up before next rung:
+1 Functional: task completes correctly.
+2 Reliable: completes every time including edge cases, offline, slow network, denied permission.
+3 Usable: first-time user succeeds without instruction.
+4 Pleasurable: personality + micro-delight + flow. Pleasure over broken lower rung = gimmick users punish.
+
+SIERRA COMPETENCE: product = tool making user more badass. Screens show user result + rising skill. Copy celebrates user action ("I exported"), never system cleverness.
+
+DESIGN PERSONA RECIPE (Walter) — build before styling:
+- Name the archetype ("capable co-pilot", "wry craftsman").
+- 3-5 brand traits, each with stated opposite ("playful, not childish").
+- Voice samples written: greeting / error / empty / success copy in persona.
+- Visual lexicon: color mood, type energy, shape language, image treatment.
+- Show-hide map: persona visible in empty states + microcopy + delight moments; hidden in dense tables, checkout, legal.
+- Authenticity gate: traits fit audience + product reality. Gimmick detected = trust loss worse than no persona. Banking/medical default calm-trust, comedy mascot = mismatch.
+
+ATTRACTION MECHANICS:
+- Aesthetic-usability effect (Kurosu & Kashimura 1995): beautiful perceived usable; flaw tolerance higher. Polish hero + first-run experience hardest. Even internal tools get dignity floor.
+- Von Restorff isolation: ONE deliberate difference per view earns memory. Pricing middle-tier highlight = textbook. Everything highlighted = nothing remembered.
+
+MEMORY ENGINEERING:
+- Peak-End rule (Kahneman/Fredrickson): experience judged by peak + ending, not average. Design an explicit peak (result reveal, aha moment) plus flawless final state. Plain middle tolerated.
+- Serial position (Ebbinghaus): first + last positions remembered best. Critical nav items at edges; strongest item opens list, CTA closes.
+- Zeigarnik + goal-gradient: unfinished tasks stay memorable; progress meters/checklists ("profile 70% complete") drive return visits; motivation rises near completion.
+- Selective attention: users filter by current goal. Task-relevant cue sits where the goal points. Off-goal motion = distraction tax.
+
+SPEED PERCEPTION (Doherty threshold <400ms):
+- Response under 400ms holds attention + flow. Slower = progress indicator mandatory.
+- Optimistic UI: apply action instantly, reconcile after; undo pattern beats wait spinner.
+- Perceived-speed craft: skeleton screens, staged reveal, prefetch likely-next view.
+
+TESLER HONESTY: total complexity constant — system absorbs (smart defaults, automation) or user pays (configuration, learning). Defaults absorb; expose configuration only when power-user demand proven.
+
+FAMILIARITY CUES (Jakob law complete protocol)
+
+Law: user spend most time on other products; expectations formed there transfer here. Violation cost = relearning tax = churn.
+
+FIVE ESSENTIALS standardized first:
+1 Navigation labels conventional.
+2 Search placement + behavior standard.
+3 Primary action placement obvious.
+4 Cart-checkout flow conventional (commerce).
+5 Profile-settings location expected.
+
+CONVENTION VOCABULARY: Log in / Sign up / Add to cart / Checkout / Filters / Sort / Search / Profile / Settings / Cancel / Delete-confirm pattern. Brand voice reserved for headlines + marketing surfaces.
+
+PLATFORM ANCHORS: iOS -> HIG patterns (tab bars/navigation stacks/action sheets). Android -> Material (FAB/bottom nav/snackbar). Web -> category top-domain convention. Desktop -> menu + shortcut expectation.
+
+DIVERGE PROTOCOL: break convention only with strong reason. Then: one-line tip near deviation + classic fallback path for one release + instrument time-to-first-action/backtrack count/error rate/completion vs baseline. Metrics worse = revert.
+
+RECOGNITION OVER RECALL: see-and-know beats remember-and-type. Icons labeled on first-use surfaces. Recent files listed, paths never demanded from memory.
+
+PRACTITIONER CORE (working designers, complete tactics)
+
+MIZKO (Designership):
+- Design system before screens: color/type/spacing tokens + component library; every screen inherits consistency free.
+- Learn by rebuild: recreate ten great interfaces pixel-close; reverse-engineer spacing/type/hierarchy decisions; taste = internalized pattern library.
+- Auto-layout + constraints at design time: responsive truth built early, never promised to dev.
+
+RAN SEGALL (Flux Academy):
+- Every section names which user need it serves; unserved section cut.
+- Process order fixed: research -> wireframe structure -> style direction -> high-fidelity -> build. Style-first process produces pretty-but-wrong.
+- Brief written in user language, verified against real user quotes.
+
+CHRIS DO (The Futur):
+- Problem sentence before pixels: "this solves X for Y". Aesthetic argument without problem statement = noise.
+- Critique protocol: presenter states problem + audience first; critics ask "what problem does this solve"; taste-first comments rejected.
+- Stakeholder translation: express design choices as business outcomes, never effort or hours.
+
+AJ&SMART:
+- Cheapest artifact answers the question: sketch -> paper prototype -> clickable mock -> coded build. Real-user test at cheapest stage able to answer.
+- Sprint shape: map -> crazy-8 sketches -> decide -> prototype -> five-user test inside five days. Five users surface ~85% of usability issues.
+- Tested-fail darling dies regardless of sunk effort.
+
+KEVIN POWELL:
+- Normal flow, box model, stacking contexts explain most layout bugs. Tricks are last resort.
+- Fluid-first: clamp(), logical properties, intrinsic patterns before breakpoint pileup.
+- HTML works standalone; CSS/JS layered as enhancement.
+
+Full source links: specs/ocx/design-taste-sources.md.
+
+=== END UI DESIGN CORE ===

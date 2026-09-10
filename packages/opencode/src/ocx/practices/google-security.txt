@@ -1,0 +1,17 @@
+---
+name: google-security
+description: Secure by design principles: SafeSQL, SafeHTML, secret detection, and logging hygiene.
+signals: security, secret, token, sql, injection, xss, password, credentials
+globs: **/*
+sources:
+- https://abseil.io/resources/swe-book | 2026-09-01
+---
+## Rules
+- SafeSQL: Never concatenate or interpolate user input directly into SQL queries; always use parameterized queries.
+- SafeHTML: Never assign unescaped strings directly to innerHTML or dangerouslySetInnerHTML; use contextual auto-escaping.
+- Secret Protection: Zero tolerance for hardcoded credentials, API tokens, JWTs, or private keys in source code.
+- Logging Hygiene: Redact or omit sensitive parameters, passwords, authorization tokens, or personally identifiable information from logs.
+- Principle of Least Privilege: Expose minimum necessary interface surface area; restrict public exports to intended contracts.
+
+## Sources
+- Google Secure Coding Practices & Software Engineering at Google (2026-09-01)

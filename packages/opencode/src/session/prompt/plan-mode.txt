@@ -12,7 +12,7 @@ Read the request and related code. Ask questions for unclear requirements. Use o
 
 1. Read the request and related code.
 
-2. Launch up to 3 explore agents in parallel when needed.
+2. Launch independent read-only explore agents in parallel only when their inputs do not depend on one another; keep shared or mutating work ordered.
   - Use 1 agent for an isolated task or known files.
   - Use more agents only when scope or patterns are unclear.
   - Use the fewest agents needed.

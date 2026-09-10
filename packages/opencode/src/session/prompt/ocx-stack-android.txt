@@ -1,9 +1,0 @@
-=== ANDROID ADAPTER ===
-
-- Read the module, minimum SDK, navigation, state, build, and test conventions first.
-- Tie work to the correct lifecycle or structured coroutine scope.
-- Preserve state across recreation when the existing architecture requires it.
-- Use semantic labels, touch targets, focus order, contrast, and content descriptions.
-- Model loading, empty, error, offline, permission, and retry states explicitly.
-- Do not claim a screen action works until its event reaches real application behavior.
-- Test narrow layouts, large text, touch, keyboard or switch access, rotation, process loss, and cancellation.

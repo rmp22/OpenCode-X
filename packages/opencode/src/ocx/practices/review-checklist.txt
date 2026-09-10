@@ -1,0 +1,19 @@
+---
+name: review-checklist
+description: Review changed behavior against the request, evidence, and failure paths.
+signals: review, audit, close, verify, acceptance
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.py, **/*.go, **/*.rs
+sources: https://google.github.io/eng-practices/review/reviewer/standard.html | 2026-08-28
+---
+## Rules
+- Check behavior, failure paths, security, and tests, not only formatting.
+- Read the changed code and its callers before judging the diff.
+- Require exact evidence for every claim of completion.
+- Reject unrelated changes and ask for the smallest useful fix.
+- Confirm the requested behavior from a clean start and an error path.
+
+## Example
+For a claimed fix, identify the original failure, run the regression check, and record what remains untested.
+
+## Sources
+- https://google.github.io/eng-practices/review/reviewer/standard.html (2026-08-28)

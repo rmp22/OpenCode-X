@@ -687,6 +687,23 @@ describe("session.compaction.prune", () => {
               text,
             })
           }
+          for (let index = 0; index < 50; index++) {
+            const msg = yield* ssn.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: info.id,
+              agent: "build",
+              model: ref,
+              time: { created: Date.now() },
+            })
+            yield* ssn.updatePart({
+              id: PartID.ascending(),
+              messageID: msg.id,
+              sessionID: info.id,
+              type: "text",
+              text: `recent-${index}`,
+            })
+          }
 
           yield* compact.prune({ sessionID: info.id })
 
@@ -1476,6 +1493,37 @@ describe("session.compaction.process", () => {
       ).toBe(true)
     }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }))
   })
+
+  itCompaction.instance(
+    "bounds the retained tail to the preserve token budget instead of a message count",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const messages = [] as SessionV1.User[]
+      for (let index = 0; index < 55; index++) messages.push(yield* createUserMessage(session.id, `message-${index}`))
+      yield* createSummaryCompaction(session.id)
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const parent = all.at(-1)?.info.id
+      if (!parent) throw new Error("Expected compaction parent")
+      yield* SessionCompaction.use.process({
+        parentID: parent,
+        messages: all,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const part = yield* readCompactionPart(session.id)
+      expect(part?.type).toBe("compaction")
+      expect(part?.tail_start_id).toBe(messages[54]?.id)
+
+      const filtered = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
+      const filteredIDs = new Set(filtered.map((message) => message.info.id))
+      expect(filteredIDs.has(messages[54]!.id)).toBe(true)
+      expect(filteredIDs.has(messages[53]!.id)).toBe(false)
+      expect(filteredIDs.has(messages[4]!.id)).toBe(false)
+    }).pipe(withCompaction({ config: cfg({ tail_turns: 1, preserve_recent_tokens: 20 }) })),
+  )
 
   itCompaction.instance(
     "ignores previous summaries when sizing the retained tail",

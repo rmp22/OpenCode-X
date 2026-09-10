@@ -27,9 +27,7 @@ export const projectCopyHandlers = HttpApiBuilder.group(InstanceHttpApi, "projec
       if (!text) return Slug.create()
       const fallback = yield* provider.defaultModel().pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (!fallback) return Slug.create()
-      const model =
-        (yield* provider.getSmallModel(fallback.providerID)) ??
-        (yield* provider.getModel(fallback.providerID, fallback.modelID))
+      const model = yield* provider.getModel(fallback.providerID, fallback.modelID)
       const sessionID = SessionID.descending()
       const result = yield* llm
         .stream({

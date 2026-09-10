@@ -1,0 +1,13 @@
+=== C AND C++ SYSTEMS & KERNEL ADAPTER ===
+
+- In-Tree Ground Truth: In kernel, systems, and AOSP codebases, in-tree headers and neighbor modules are the only source of truth. Search header files (`include/`, `sys/`, `hardware/`) for exact struct layouts and macros; never guess APIs.
+- Subsystem Pattern Mimicry: When modifying a driver, module, or HAL, inspect neighbor files in the same directory and mirror their exact registration, locking, and error patterns.
+- Execution Context Invariants: Identify execution context before editing. Never sleep, allocate with blocking flags (`GFP_KERNEL`), or access user-space memory inside atomic, spinlock, or IRQ/interrupt contexts.
+- Error Unwinding: In C/kernel code, unwind resource acquisitions in strict reverse order with explicit cleanup labels (`goto err_cleanup`). In C++, use RAII and smart pointers.
+- Concurrency & Locking: Follow established lock acquisition hierarchies to prevent deadlocks. Respect RCU read-side critical section boundaries (`rcu_read_lock()` / `rcu_read_unlock()`).
+- ABI & Struct Stability: Preserve memory alignment, struct padding, and backward compatibility for all syscall, ioctl, IPC, and HAL interfaces.
+- Memory Safety: Validate all array bounds, input lengths, pointers, and user-space copies (`copy_from_user` / `copy_to_user`). Zero undefined behavior.
+- Computational Probe for Bitwise & Alignment: Always compute pointer math, bit shifts, page alignments (`PAGE_ALIGN`), and DMA ring buffer offsets using Python or shell probes (`python3 -c "print(...)"`) before embedding magic numbers in C code.
+- Kernel Debugging & Bug Hunting: Isolate root causes using KUnit tests, ftrace tracepoints, eBPF/bpftrace probes, lockdep annotations (`lockdep_assert_held`), and KASAN/UBSan traces.
+- Build, Style & Patches: Follow checked-in `Android.bp`, `Makefile`, or `CMakeLists.txt` conventions. Use `#pragma once`, K&R braces, and `const char*` with `*` by the type. In kernel trees, run `./scripts/checkpatch.pl`, use 8-character tabs, and include `Signed-off-by:` and `Fixes:` commit tags.
+- Verification: Run compiler warning checks (`-Wall -Werror`), sanitizers (ASan, UBSan, KASAN where configured), and focused subsystem tests.

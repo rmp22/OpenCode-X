@@ -97,15 +97,15 @@ Usage notes:
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
-  - Avoid using Bash with the \`find\`, \`grep\`, \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`echo\` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
-    - File search: Use Glob (NOT find or ls)
-    - Content search: Use Grep (NOT grep or rg)
-    - Read files: Use Read (NOT cat/head/tail)
-    - Edit files: Use Edit (NOT sed/awk)
-    - Write files: Use Write (NOT echo >/cat <<EOF)
+  - Prefer using dedicated tools (Glob, Grep, Read, Edit, Write) when suitable, but standard shell utilities (rg, grep, find, etc.) are supported when needed for complex pipelines or filtered searches:
+    - File search: Glob or find
+    - Content search: Grep or rg
+    - Read files: Prefer Read tool (or cat/head/tail when pipelining)
+    - Edit files: Prefer Edit tool
+    - Write files: Prefer Write tool
     - Communication: Output text directly (NOT echo/printf)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
+     - Batch commands only when they are independent and read-only. Keep mutations and dependent commands ordered. For example, "git status" and "git diff" can run together, but a write must wait for the read it depends on.
     - ${chain}
     - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
@@ -156,7 +156,7 @@ Usage notes:
     - Write files: Use Write (NOT Set-Content/Out-File or here-strings)
     - Communication: Output text directly (NOT Write-Output/Write-Host)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
+     - Batch commands only when they are independent and read-only. Keep mutations and dependent commands ordered. For example, "git status" and "git diff" can run together, but a write must wait for the read it depends on.
     - ${chain}
     - Use \`;\` only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
@@ -205,7 +205,7 @@ Usage notes:
     - Write files: Use Write (NOT echo > file)
     - Communication: Output text directly (NOT echo)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "dir" and "where cmd", send a single message with two bash tool calls in parallel.
+     - Batch commands only when they are independent and read-only. Keep mutations and dependent commands ordered. For example, "dir" and "where cmd" can run together, but a write must wait for the read it depends on.
     - ${chain}
     - Use \`&\` only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)

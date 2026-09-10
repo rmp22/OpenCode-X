@@ -1,0 +1,10 @@
+{
+  "id": "retry-error-patterns",
+  "base": "f929f8f100581a94f3484b6992d02d57d75fab7f",
+  "fix": "61aefc0759",
+  "testPaths": ["packages/opencode/test/session/retry.test.ts"],
+  "oracle": ["bun", "test", "test/session/retry.test.ts"],
+  "oracleCwd": "packages/opencode",
+  "timeoutMs": 120000,
+  "prompt": "Some transient provider API errors are not retried today. Messages such as \"Internal server error\", \"fetch failed\", \"connection refused\", \"response timed out\" or \"Please retry your request\" fall through as non-retryable, retryable text inside an error response body is ignored, and hyphenated variants like \"service-unavailable\" are missed. Extend session retry detection so these message patterns count as retryable, including matching against response bodies. Do not change backoff behavior."
+}

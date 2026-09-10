@@ -13,10 +13,12 @@
     "profile:test": "bun run script/profile-test-files.ts",
     "build": "bun run script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
+    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
+    "google-enforce": "bun run ./src/ocx/google/cli.ts"
   },
   "bin": {
-    "ocx": "./bin/ocx"
+    "ocx": "./bin/ocx",
+    "google-enforce": "./src/ocx/google/cli.ts"
   },
   "exports": {
     "./*": "./src/*.ts"

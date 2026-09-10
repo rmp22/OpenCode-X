@@ -1,0 +1,1 @@
+Fetch independent page assets with the resumable batch when it reduces round-trips. Keep dependent downloads ordered; every download is magic-checked, weighed against a byte budget, and recorded in assets/manifest.json with its alt text so verification can cite evidence instead of claims.

@@ -25,7 +25,6 @@ import { Parameters as Todo } from "../../src/tool/todo"
 import { Parameters as WebFetch } from "../../src/tool/webfetch"
 import { Parameters as WebSearch } from "../../src/tool/websearch"
 import { Parameters as Write } from "../../src/tool/write"
-import { Parameters as Structure } from "../../src/tool/structure"
 import { Parameters as Audit } from "../../src/tool/audit"
 import { Parameters as Design } from "../../src/tool/design"
 import { Parameters } from "../../src/tool/strategy"
@@ -301,38 +300,6 @@ describe("tool parameters", () => {
     })
     test("rejects an empty strategy batch", () => {
       expect(accepts(Parameters, { names: [] })).toBe(false)
-    })
-  })
-
-  describe("structure", () => {
-    test("accepts a file plan and ownership contract", () => {
-      expect(
-        parse(Structure, {
-          operation: "add",
-          goal: "Add a page",
-          scope: "landing page files",
-          allowedChanges: ["new files"],
-          allowedBreaks: [],
-          nonGoals: ["backend changes"],
-          acceptanceChecks: ["page loads"],
-          rollbackPlan: "delete the new files",
-          files: [
-            {
-              path: "index.html",
-              owns: "document shell",
-              doesNotOwn: "section behavior",
-              importsOrUses: ["styles.css"],
-              publicInputsOrOutputs: ["mount point"],
-            },
-          ],
-          dependencyDirection: "page uses styles",
-          stateOwner: "script.js",
-          preservedContracts: [],
-        }),
-      ).toMatchObject({ operation: "add", goal: "Add a page", files: [{ path: "index.html" }] })
-    })
-    test("rejects an empty file plan", () => {
-      expect(accepts(Structure, { operation: "add", goal: "Add a page", files: [] })).toBe(false)
     })
   })
 

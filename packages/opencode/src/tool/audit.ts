@@ -18,7 +18,7 @@ const Axis = Schema.Literals([
   "provenance",
 ])
 const Severity = Schema.Literals(["blocker", "warning", "note"])
-const Status = Schema.Literals(["pass", "fail", "unknown", "not-applicable"])
+const Status = Schema.Literals(["pass", "fail", "unknown", "not-applicable", "verified"])
 
 const Finding = Schema.Struct({
   axis: Axis,
@@ -33,6 +33,7 @@ const Check = Schema.Struct({
   name: Schema.NonEmptyString,
   status: Status,
   evidence: Schema.NonEmptyString,
+  evidenceRef: Schema.optional(Schema.NonEmptyString),
 })
 
 export const Parameters = Schema.Struct({
@@ -51,6 +52,9 @@ type Metadata = {
   blockers: number
   warnings: number
   unknowns: string[]
+  reportedPasses: number
+  verifiedPasses: number
+  unverified: string[]
 }
 
 export const AuditTool = Tool.define<typeof Parameters, Metadata, never>(
@@ -61,7 +65,7 @@ export const AuditTool = Tool.define<typeof Parameters, Metadata, never>(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>) =>
         Effect.succeed({
-          title: `Audited ${params.artifact}`,
+          title: `Audit recorded for ${params.artifact}`,
           output: [
             "AUDIT REPORT",
             `Artifact: ${params.artifact}`,
@@ -81,19 +85,34 @@ export const AuditTool = Tool.define<typeof Parameters, Metadata, never>(
             "",
             "CHECKS",
             ...(params.checks.length
-              ? params.checks.map((check) => `- [${check.status}] ${check.name}: ${check.evidence}`)
+              ? params.checks.map(
+                  (check) =>
+                    `- [${check.status === "pass" ? "reported-pass/unverified" : check.status}] ${check.name}: ${check.evidence}${check.evidenceRef ? ` (ref: ${check.evidenceRef})` : ""}`,
+                )
               : ["- None recorded."]),
             "",
             "REMAINING UNKNOWNS",
             ...(params.remainingUnknowns.length
               ? params.remainingUnknowns.map((item) => `- ${item}`)
               : ["- None recorded."]),
+            "",
+            "VERDICT",
+            params.findings.some((finding) => finding.severity === "blocker")
+              ? "BLOCKED: resolve the blocker findings before delivery."
+              : params.checks.some((check) => check.status !== "verified" && check.status !== "not-applicable")
+                ? `UNVERIFIED: ${params.checks.filter((check) => check.status !== "verified" && check.status !== "not-applicable").length} check(s) lack verification evidence; do not claim completion.`
+                : "VERIFIED: every applicable check cites evidence.",
           ].join("\n"),
           metadata: {
             axes: [...params.axes],
             blockers: params.findings.filter((finding) => finding.severity === "blocker").length,
             warnings: params.findings.filter((finding) => finding.severity === "warning").length,
             unknowns: [...params.remainingUnknowns],
+            reportedPasses: params.checks.filter((check) => check.status === "pass").length,
+            verifiedPasses: params.checks.filter((check) => check.status === "verified").length,
+            unverified: params.checks
+              .filter((check) => check.status !== "verified" && check.status !== "not-applicable")
+              .map((check) => check.name),
           },
         }),
     } satisfies Tool.DefWithoutID<typeof Parameters, Metadata>

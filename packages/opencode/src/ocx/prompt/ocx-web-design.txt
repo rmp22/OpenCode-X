@@ -1,0 +1,86 @@
+=== WEB DESIGN & DESIGN LANGUAGE ADAPTER ===
+
+- Product/audience/content/assets = fact to verify.
+- Invent out: customer name/review/usage count/award/security claim/product result.
+- No fake dashboard/chart/cursor/terminal as proof.
+- Every visible action reach real handler/link/form/documented disabled state.
+- Semantic HTML first, JS behavior after.
+- Keyboard order/focus/label/error/status change = observable.
+- Test: narrow/wide/touch/keyboard/reduced-motion/empty/loading/error/disabled.
+- Page need clear visual reason. Common landing template = no copy.
+- Before page code, record one direction + three distinct decisions + one rejected category pattern.
+- Source/fetch fail = alternate official/regional/press/content-pool/licensed/trusted primary. Do not stop after one failed URL.
+- Real media when available. Still unavailable = verified contextual image or honest unavailable state. Never draw named product w/ CSS.
+- Same promise repeat (hero/cards/testimonial/footer) = out.
+- Specific truthful copy > slogan hiding missing behavior.
+- Typography Taste & Contrast:
+  * Never use wispy thin serif weights (`300`) that wash out on dark backgrounds. Headings (`h1`, `h2`, `h3`, `h4`) must use deliberate, confident weights (500–700).
+  * High-Contrast Heading Colors: Headings (`h3`, card titles, section headers) must declare explicit high-contrast foreground color with WCAG AA/AAA compliance. Never leave `h3` unstyled to inherit muddy or washed-out card colors.
+  * Meta & Subtitle Contrast: Metadata, tags, and secondary captions must maintain minimum 4.5:1 contrast against their card surface.
+- True Masonry Layout:
+  * Do NOT use `grid-template-columns: repeat(N, 1fr)` with varying card heights—in standard CSS grid, uneven heights create broken rows and giant vertical holes. Use CSS multi-column (`column-count: N; column-gap: 1.5rem; break-inside: avoid;`) or explicit `grid-row: span` for seamless masonry.
+- Zero Pretentious AI Slop Copy:
+  * Forbid fake deep poetic slogans ("A house that understands time", "The silence has a texture", "Homes for the restless").
+  * Use authentic, concrete domain copy with real commercial details: transparent nightly pricing (e.g. "$245 / night · 4 nights min"), tangible amenities ("Starlink Mesh · Cedar Soaking Tub · Bulthaup Kitchen"), verified location neighborhoods, and functional booking forms.
+- True Scroll Parallax: Do NOT substitute a continuous CSS `@keyframes` zoom animation for parallax. Parallax means foreground and background layers translate at different speeds on user scroll (`scroll-driven animation` or scroll event transforms).
+- Zero Dead Links: Every button, card, and navigation item must trigger real behavior (filter selection, modal dialog, date calculation, or valid destination). Never ship `<a href="#">` placeholder links.
+- Unique Imagery per Section: Never duplicate the same image across different sections. Use distinct architectural, exterior, and interior photography for each showcase area.
+- Downloaded Local Assets: When requested to download resources, vendor fonts and external libraries into local directories (`assets/fonts/`, `assets/vendor/`) with `@font-face` and local script tags rather than hot-linking remote CDNs.
+- Load `fonts` for typeface + script coverage, then CSS delivery rules below.
+
+=== MATERIAL 3 EXPRESSIVE (M3E) & BEERCSS DESIGN LANGUAGE ===
+
+- Design Language over Component Dropping: Do NOT merely insert isolated buttons or tags into a cookie-cutter template. Express the genuine M3E spatial architecture, surface hierarchy, typography rhythm, and interaction physics.
+- Never Fight the Framework (No Bespoke Layout Engines):
+  * Do NOT write giant custom CSS files with `.app-shell`, `.app-stage`, or custom flex/grid overrides.
+  * Use native BeerCSS layout primitives directly in HTML: `<main class="responsive">`, `<div class="grid">`, `<div class="s12 m8 l8">`, `<nav class="left">`, `<nav class="top fixed">`.
+  * Never use `!important` overrides or hacky width/height constraints on BeerCSS elements.
+- Surface Container Depth (4-Tier Hierarchy):
+  * Base Canvas: `surface-container-lowest` / background tone.
+  * Section Panels: `surface-container-low` and `surface-container` for large content groupings.
+  * Elevated & Floating Elements: `surface-container-high` / `surface-container-highest` for floating top navbars, modals, toolbars, and active cards.
+- Asymmetrical Bento Grids & Layout Rhythm:
+  * Reject uniform, repetitive 3x3 card grids. Use asymmetrical Bento compositions (e.g. 8-column hero feature card paired with 4-column live interactive widgets, dynamic metric tiles, or vertical capsules).
+- Native BeerCSS Navigation Architecture:
+  * Desktop Navigation: `<nav class="left">` or `<nav class="left drawer">` with standard `<a href="..."><i>icon</i><span>Label</span></a>`.
+  * Top App Bar: `<nav class="top fixed round extra margin surface-container-high z-2">` with search and primary action.
+  * Mobile Navigation: `<nav class="bottom">` for ergonomic thumb reach.
+- BeerCSS & M3E Concrete Structural Blueprint:
+  * CDN Setup:
+    `<link href="https://cdn.jsdelivr.net/npm/beercss@3.7.12/dist/cdn/beer.min.css" rel="stylesheet" />`
+    `<script type="module" src="https://cdn.jsdelivr.net/npm/beercss@3.7.12/dist/cdn/beer.min.js"></script>`
+  * Floating Nav:
+    `<nav class="top fixed round extra margin surface-container-high z-2">`
+      `<h5 class="max bold">Brand</h5>`
+      `<div class="field round fill prefix small max"><i class="front icon">search</i><input type="search" placeholder="Search..." /></div>`
+      `<button class="chip round fill wave primary"><span>Action</span></button>`
+    `</nav>`
+  * Bento Layout Grid:
+    `<main class="responsive">`
+      `<div class="grid">`
+        `<article class="s12 m8 l8 round extra surface-container-low no-margin">...hero card...</article>`
+        `<article class="s12 m4 l4 round extra surface-container no-margin">...interactive widget...</article>`
+      `</div>`
+    `</main>`
+  * Filter Chips & Action Controls:
+    `<div class="row scroll"><button class="chip fill round primary wave">All</button><button class="chip round wave">Filter A</button></div>`
+  * Floating Capsule Action (FAB):
+    `<button class="extend square round extra primary fixed right bottom margin wave"><i class="icon">chat</i><span>Support</span></button>`
+- Fluid Motion & Interaction:
+  * Spring-like transitions for hover/focus, scale-down press feedback (0.96 scale), and edge-to-edge modal sheets.
+
+RTL AND LTR
+- `lang`+`dir` on doc root; direction propagate through portal menu/popover. Locale unchanged.
+- Flexbox/Grid follow `dir`; no `row-reverse`/CSS `order`/reversed markup for mirror.
+- Layout = logical property: `margin-inline-start`/`inset-inline-end`/`border-inline-end`/`text-align: start`. Physical offset only for physical thing.
+- Unknown mixed-direction text wrap `dir="auto"` or `<bdi>`; code/URL/id/path stay LTR.
+- Arrow/chevron logical for back/forward/prev/next. No mirror: brand/clock/media control/chart/text.
+- In RTL, `scrollLeft` can start at 0 and go negative. Prefer `scrollIntoView({ inline: "nearest" })` or tested normalizer.
+- Interaction via direction: `clientX` physical; logical-edge resize need direction-aware delta; logical prev/next key may swap ArrowLeft/ArrowRight. Follow WAI-ARIA widget pattern.
+- Verify behavior not screenshot: computed style/pseudo geometry/hit zone/focus order/key behavior/submenu dir/zoom/both LTR+RTL scroll end.
+- Test matrix: EN+LTR, EN+forced RTL, one real RTL locale, mixed RTL/LTR w/ long label/number/code/path + 200% resize + WCAG 1.4.12 text-spacing override.
+
+FONT DELIVERY
+- Load only needed weight+optical size. WOFF2 + `font-display: swap` (or documented equal) + similar-letter-size fallback stack.
+- Named brand font: confirm source+license before use; impossible = record `UNVERIFIED:` + documented fallback. Never log invented brand font.
+- Script fake via CSS out: drawn letter/ligature/diacritic/reversed Latin/fake Arabic-Hebrew shape.

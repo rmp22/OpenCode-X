@@ -308,8 +308,18 @@ function taskStatus(part: ToolPart): FooterSubagentTab["status"] {
   return "running"
 }
 
+function parseOwnerFromTitle(title: string | undefined): string | undefined {
+  if (!title) return undefined
+  const match = title.match(/\(([^)]+ Owner)\)/i)
+  return match?.[1]
+}
+
 function taskTab(part: ToolPart, sessionID: string): FooterSubagentTab {
-  const label = Locale.titlecase(text(part.state.input.subagent_type) ?? "general")
+  const ownerName =
+    text(metadata(part, "ownerName")) ??
+    text(metadata(part, "owner")) ??
+    parseOwnerFromTitle(stateTitle(part))
+  const label = ownerName ?? Locale.titlecase(text(part.state.input.subagent_type) ?? "general")
   const description = text(part.state.input.description) ?? stateTitle(part) ?? inputLabel(part.state.input) ?? ""
 
   return {
@@ -459,11 +469,12 @@ function ensureBlockerTab(
     return true
   }
 
+  const ownerName = parseOwnerFromTitle(title)
   data.tabs.set(sessionID, {
     sessionID,
     partID: `bootstrap:${sessionID}`,
     callID: `bootstrap:${sessionID}`,
-    label: text(title) ?? Locale.titlecase(kind),
+    label: ownerName ?? text(title) ?? Locale.titlecase(kind),
     description: kind === "permission" ? "Pending permission" : "Pending question",
     status: "running",
     lastUpdatedAt: Date.now(),

@@ -17,6 +17,19 @@ export function Footer() {
     if (route.data.type !== "session") return []
     return sync.data.permission[route.data.sessionID] ?? []
   })
+  const sessionTokens = createMemo(() => {
+    if (route.data.type !== "session") return undefined
+    const t = sync.session.get(route.data.sessionID)?.tokens as
+      | { input?: number; output?: number }
+      | undefined
+    if (!t) return undefined
+    const fmt = (n?: number) =>
+      n && n > 0 ? (n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : `${n}`) : undefined
+    const input = fmt(t.input)
+    const output = fmt(t.output)
+    if (!input && !output) return undefined
+    return { input, output }
+  })
   const directory = useDirectory()
   const connected = useConnected()
 
@@ -81,6 +94,13 @@ export function Footer() {
                 </Switch>
                 {mcp()} MCP
               </text>
+            </Show>
+            <Show when={sessionTokens()}>
+              {(t) => (
+                <text fg={theme.textMuted}>
+                  ↑{t().input ?? "0"} ↓{t().output ?? "0"}
+                </text>
+              )}
             </Show>
             <text fg={theme.textMuted}>/status</text>
           </Match>

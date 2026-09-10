@@ -13,11 +13,14 @@ import {
   ToolFailure,
   ToolRuntime,
   toDefinitions,
+  LLMEvent,
   type JsonSchema,
-  type LLMEvent,
+  type ToolDispatchResult,
 } from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
+import { WorkflowV2 } from "@/ocx/workflow-v2"
+import type { OCXDb } from "@/ocx/ocx-db"
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey: string; readonly baseURL?: string }
@@ -27,6 +30,7 @@ export type StreamResult =
   | { readonly type: "unsupported"; readonly reason: string }
 
 type StreamInput = {
+  readonly sessionID: string
   readonly model: Provider.Model
   readonly provider: Provider.Info
   readonly auth: Auth.Info | undefined
@@ -41,6 +45,10 @@ type StreamInput = {
   readonly providerOptions?: Record<string, any>
   readonly headers: Record<string, string>
   readonly abort: AbortSignal
+  readonly workflow?: unknown
+  readonly currentWorkflow?: () => unknown
+  readonly workflowStore?: OCXDb.Store
+  readonly publishWorkflow?: (state: OCXDb.State) => Effect.Effect<void>
 }
 
 export function status(input: Pick<StreamInput, "model" | "provider" | "auth">): RuntimeStatus {
@@ -87,6 +95,7 @@ export function stream(input: StreamInput): StreamResult {
   // — if a field ever needs to differ between the two surfaces, the
   // translation belongs here, not split across both packages.
   const tools = nativeTools(input.tools, input)
+  const dispatchTools = { ...tools }
   const request = LLMNative.request({
     model: input.model,
     apiKey: current.apiKey,
@@ -118,7 +127,15 @@ export function stream(input: StreamInput): StreamResult {
                 : Stream.make(event).pipe(
                     Stream.concat(
                       Stream.fromEffectDrain(
-                        ToolRuntime.dispatch(tools, event).pipe(
+                        dispatchTool({
+                          tools: dispatchTools,
+                          event,
+                          sessionID: input.sessionID,
+                          workflow: input.workflow,
+                          currentWorkflow: input.currentWorkflow,
+                          workflowStore: input.workflowStore,
+                          publishWorkflow: input.publishWorkflow,
+                        }).pipe(
                           Effect.flatMap((dispatched) => Queue.offerAll(results, dispatched.events)),
                           Effect.catchCause((cause) => Queue.failCause(results, cause)),
                           Effect.asVoid,
@@ -159,6 +176,35 @@ function providerHeaders(value: unknown): Record<string, string> | undefined {
   )
 }
 
+function dispatchTool(input: {
+  readonly tools: ReturnType<typeof nativeTools>
+  readonly event: Extract<LLMEvent, { type: "tool-call" }>
+  readonly sessionID: string
+  readonly workflow?: unknown
+  readonly currentWorkflow?: () => unknown
+  readonly workflowStore?: OCXDb.Store
+  readonly publishWorkflow?: (state: OCXDb.State) => Effect.Effect<void>
+}): Effect.Effect<ToolDispatchResult> {
+  return Effect.gen(function* () {
+    const authorization = WorkflowV2.Gate.guardTool({
+      toolName: input.event.name,
+      sessionID: input.sessionID,
+    })
+    if (!authorization.allowed) {
+      const message = authorization.renderedFailure ?? authorization.reason ?? `Workflow blocked: tool ${input.event.name} disallowed`
+      const result = { type: "error" as const, value: message }
+      return {
+        result,
+        events: [
+          LLMEvent.toolError({ id: input.event.id, name: input.event.name, message }),
+          LLMEvent.toolResult({ id: input.event.id, name: input.event.name, result }),
+        ],
+      }
+    }
+    return yield* ToolRuntime.dispatch(input.tools, input.event)
+  })
+}
+
 function nativeSchema(value: unknown): JsonSchema {
   if (!value || typeof value !== "object") return { type: "object", properties: {} }
   if ("jsonSchema" in value && value.jsonSchema && typeof value.jsonSchema === "object")
@@ -166,7 +212,13 @@ function nativeSchema(value: unknown): JsonSchema {
   return asSchema(value as Parameters<typeof asSchema>[0]).jsonSchema as JsonSchema
 }
 
-export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput, "messages" | "abort">) {
+export function nativeTools(
+  tools: Record<string, Tool>,
+  input: Pick<
+    StreamInput,
+    "sessionID" | "messages" | "abort" | "workflow" | "currentWorkflow" | "workflowStore" | "publishWorkflow"
+  >,
+) {
   return Object.fromEntries(
     Object.entries(tools).map(([name, item]) => [
       name,
@@ -177,7 +229,13 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
         jsonSchema: nativeSchema(item.inputSchema),
         execute: (args: unknown, ctx) =>
           Effect.tryPromise({
-            try: () => {
+            try: async () => {
+              const authorization = WorkflowV2.Gate.guardTool({
+                toolName: name,
+                sessionID: input.sessionID,
+              })
+              if (!authorization.allowed)
+                throw new Error(authorization.renderedFailure ?? authorization.reason ?? `Workflow blocked: tool ${name} disallowed`)
               if (!item.execute) throw new Error(`Tool has no execute handler: ${name}`)
               return item.execute(args, {
                 toolCallId: ctx?.id ?? name,

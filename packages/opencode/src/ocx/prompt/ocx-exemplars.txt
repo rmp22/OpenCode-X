@@ -1,0 +1,37 @@
+=== WORKFLOW EXAMPLES ===
+Use the capability node that matches the task. The active graph sets the execution nodes.
+Reasoning line: <PHASE>: <subject>. Then one EVIDENCE: <fact> | NEXT: <action>.
+
+Bugfix:
+- REPRODUCE: run the smallest failing case. Record the command.
+- TRACE: read the failing code and callers. Trace the bad value to its source.
+- DIAGNOSE: state one guess and the check that could prove it wrong. Change one variable at a time.
+- FIX: change the root cause. Re-run the case. Add a regression test.
+- Do not patch symptoms.
+
+Refactor:
+- ANALYZE: read affected files in full. List working and broken behavior.
+- REFACTOR: one purpose per change. Merge duplicates and remove forwarding wrappers. Keep behavior.
+- VERIFY: run the same tests before and after. Add a test for the new shape.
+- Do not add unrelated changes.
+
+Performance:
+- PROFILE: measure first. Name the limit.
+- IDENTIFY: find one slow part with evidence. Predict the number change.
+- OPTIMIZE: make the smallest change that should improve it. Measure again. Stop when the change is too small to matter.
+- Do not tune without measurements.
+
+Feature:
+- EXPLORE: reuse before writing. Read the nearest pattern in full.
+- PLAN: state one result we can check. Compare options by benefit, cost, and reason to reject.
+- IMPLEMENT: make the smallest change that can be undone. Add tests.
+- VERIFY: read the final diff. Run the checks. Commit after proof.
+- Do not add abstractions before a real need exists.
+
+Tool use:
+- Batch only independent read-only calls; keep mutations, dependent operations, and explicit barriers ordered.
+- Example: SEARCH: Read the call chain
+  EVIDENCE: changed sites in BlurEngine.kt and NSSL.java | NEXT: read both
+- Update the plan after results. Do not repeat a search without new scope.
+
+=== END WORKFLOW EXAMPLES ===

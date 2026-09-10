@@ -118,14 +118,13 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("exposes structure and audit", () =>
+  it.instance("does not expose audit or design as tools", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
-      expect(ids).toContain("structure")
-      expect(ids).toContain("audit")
-      expect(ids).toContain("design")
+      expect(ids).not.toContain("audit")
+      expect(ids).not.toContain("design")
     }),
   )
 

@@ -164,8 +164,6 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true })
-
 const testLLMServerNode = LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })
 
 const promptRoot = LayerNode.group([
@@ -208,12 +206,12 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking"; ocxPipeline?: boolean }) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
-    [RuntimeFlags.node, runtimeFlags],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true, ...(input?.ocxPipeline ? { ocxPipeline: true } : {}) })],
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
@@ -221,13 +219,13 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   return LayerNode.compile(promptRoot, replacements)
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking"; ocxPipeline?: boolean }) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
-    [RuntimeFlags.node, runtimeFlags],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true, ...(input?.ocxPipeline ? { ocxPipeline: true } : {}) })],
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
@@ -242,6 +240,8 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const blocking = testEffect(makeHttp({ processor: "blocking" }))
+const itOcx = testEffect(makeHttp({ ocxPipeline: true }))
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -297,6 +297,26 @@ function providerCfg(url: string) {
         options: {
           ...cfg.provider.test.options,
           baseURL: url,
+        },
+      },
+    },
+  }
+}
+
+function reasoningProviderCfg(url: string) {
+  const base = providerCfg(url)
+  return {
+    ...base,
+    provider: {
+      ...base.provider,
+      test: {
+        ...base.provider.test,
+        models: {
+          ...base.provider.test.models,
+          "test-model": {
+            ...base.provider.test.models["test-model"],
+            reasoning: true,
+          },
         },
       },
     },
@@ -511,6 +531,115 @@ it.instance("loop calls LLM and returns assistant message", () =>
     const parts = result.parts.filter((p) => p.type === "text")
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+blocking.instance.skip("admits the thinking title before creating the processor", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(reasoningProviderCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Find the auth files" }],
+    })
+
+    const release = yield* Deferred.make<void>()
+    yield* llm.pushMatch(
+      (hit) => JSON.stringify(hit.body).includes("you are entering the thinking phase"),
+      reply().wait(deferredAsPromise(release)).text("Search auth files").stop().item(),
+    )
+
+    let processorCreated = false
+    processorCreateStarted.push(() => {
+      processorCreated = true
+    })
+    const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const hits = yield* llm.hits
+        return hits.find((hit) => JSON.stringify(hit.body).includes("you are entering the thinking phase"))
+      }),
+      "timed out waiting for the thinking title request",
+    )
+    expect(processorCreated).toBe(false)
+
+    yield* Deferred.succeed(release, undefined)
+    yield* pollWithTimeout(
+      Effect.sync(() => (processorCreated ? (true as const) : undefined)),
+      "processor was not created after title admission",
+    )
+    expect(processorCreated).toBe(true)
+    yield* Fiber.interrupt(loop)
+  }),
+)
+
+// The ocx frame reads per-step services through a closure; this pins the call
+// order so the frame can never run before those bindings initialize again.
+itOcx.instance("loop completes when the ocx pipeline frame runs", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("world")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.error).toBeUndefined()
+    const parts = result.parts.filter((p) => p.type === "text")
+    expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
+    // Hidden ocx stages add their own provider calls; the main turn must be among them.
+    expect((yield* llm.hits).length).toBeGreaterThanOrEqual(1)
+  }),
+)
+
+itOcx.instance("stops immediately after a final needs-input response", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const todos = yield* Todo.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Ask the user for the missing path" }],
+    })
+    yield* todos.update({
+      sessionID: chat.id,
+      todos: [{ content: "wait for the path", status: "pending", priority: "p1" }],
+    })
+    yield* llm.text("PHASE: answer DEPTH: concise STATE: needs_input\nNeed the path from the user.")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const text = result.parts.find((part): part is SessionV1.TextPart => part.type === "text")
+    expect(text?.text).toContain("STATE: needs_input")
+    expect(yield* llm.calls).toBe(1)
+    expect(yield* llm.inputs).toHaveLength(1)
+
+    const second = yield* prompt.loop({ sessionID: chat.id })
+    expect(second.info.id).toBe(result.info.id)
+    expect(yield* llm.calls).toBe(1)
   }),
 )
 

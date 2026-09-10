@@ -1,7 +1,7 @@
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
-import { MessageV2 } from "./message-v2"
+import { OCXRetry } from "@/ocx/ocx-retry"
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
 
@@ -13,6 +13,7 @@ export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {
 
 export type Retryable = {
   message: string
+  silent?: boolean
   action?: {
     reason: RetryReason
     provider: string
@@ -25,8 +26,9 @@ export type Retryable = {
 
 export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
-export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
-export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+export const RETRY_MAX_DELAY_NO_HEADERS = 30_000
+export const RETRY_MAX_DELAY = 2_147_483_647
+export const DEFAULT_MAX_RETRIES = 3
 
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
@@ -41,7 +43,14 @@ function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
-export function delay(attempt: number, error?: SessionV1.APIError) {
+export function delay(attempt: number, error?: SessionV1.APIError, options?: { jitter?: boolean }) {
+  const jitter = options?.jitter ?? false
+  const applyJitter = (ms: number) => {
+    if (!jitter) return ms
+    const factor = 0.85 + Math.random() * 0.3
+    return Math.round(ms * factor)
+  }
+
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
@@ -57,28 +66,42 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
       if (retryAfter) {
         const parsedSeconds = Number.parseFloat(retryAfter)
         if (!Number.isNaN(parsedSeconds)) {
-          // convert seconds to milliseconds
           return cap(Math.ceil(parsedSeconds * 1000))
         }
-        // Try parsing as HTTP date format
         const parsed = Date.parse(retryAfter) - Date.now()
         if (!Number.isNaN(parsed) && parsed > 0) {
           return cap(Math.ceil(parsed))
         }
       }
 
-      return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1))
+      return cap(applyJitter(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)))
     }
   }
 
-  return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
+  return cap(applyJitter(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)))
+}
+
+export function isContextOverflow(error: Err): boolean {
+  if (SessionV1.ContextOverflowError.isInstance(error)) return true
+  if (SessionV1.APIError.isInstance(error)) {
+    const body = error.data.responseBody ?? error.data.message
+    if (typeof body === "string" && /context.*(length|window|limit|overflow)|maximum context length|token limit/i.test(body)) {
+      return true
+    }
+  }
+  if (error instanceof Error && /context.*(length|window|limit|overflow)|maximum context length|token limit/i.test(error.message)) {
+    return true
+  }
+  return false
 }
 
 export function retryable(error: Err, provider: string) {
-  // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
+  if (isContextOverflow(error)) return undefined
+  if (OCXRetry.isSilentContinueError(error)) return { message: "", silent: true }
   if (SessionV1.APIError.isInstance(error)) {
     const status = error.data.statusCode
+    if (status === 401 || status === 404) return undefined
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
     if (
@@ -175,22 +198,43 @@ function parseJSON(value: unknown) {
 export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
-  set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
+  maxRetries?: number
+  jitter?: boolean
+  onRetryAttempt?: (diagnostic: {
+    attempt: number
+    message: string
+    waitMs: number
+    error: Err
+    timestamp: number
+  }) => Effect.Effect<void>
+  set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number; silent?: boolean }) => Effect.Effect<void>
 }) {
+  const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
+      if (meta.attempt > maxRetries) return Cause.done(meta.attempt)
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined, { jitter: opts.jitter })
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,
           message: retry.message,
           action: retry.action,
           next: now + wait,
+          silent: retry.silent,
         })
+        if (opts.onRetryAttempt) {
+          yield* opts.onRetryAttempt({
+            attempt: meta.attempt,
+            message: retry.message,
+            waitMs: wait,
+            error,
+            timestamp: now,
+          })
+        }
         return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
       })
     }),
